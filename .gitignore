@@ -1,0 +1,38 @@
+# Environment files with credentials
+.env
+.env.*
+*.env
+
+# Spotify cache (contains auth tokens)
+.spotify_cache
+.spotify_cache.*
+
+# Generated output files
+instagram_accounts_*.json
+instagram_accounts_*.txt
+instagram_accounts_*.csv
+instagram_urls_*.txt
+instagram_urls_*_apify_input.json
+concerts_*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

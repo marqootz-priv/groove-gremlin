@@ -1,0 +1,2 @@
+web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 4
+worker: python -c "from workers import q; from rq import Worker; Worker(q).work()"

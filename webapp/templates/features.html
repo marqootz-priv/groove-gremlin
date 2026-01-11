@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Features - Groove Gremlin{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 32px;">Features</h1>
+
+<!-- Tabs -->
+<div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); margin-bottom: 32px;">
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <a href="{{ url_for('features', tab='follow_artists') }}" 
+           class="tab-link {% if active_tab == 'follow_artists' %}active{% endif %}">
+            🎤 Follow Artists
+        </a>
+        <a href="{{ url_for('features', tab='randomize_playlists') }}" 
+           class="tab-link {% if active_tab == 'randomize_playlists' %}active{% endif %}">
+            🔀 Randomize Playlists
+        </a>
+        <a href="{{ url_for('features', tab='find_concerts') }}" 
+           class="tab-link {% if active_tab == 'find_concerts' %}active{% endif %}">
+            🎵 Find Concerts
+        </a>
+        <a href="{{ url_for('features', tab='find_instagram') }}" 
+           class="tab-link {% if active_tab == 'find_instagram' %}active{% endif %}">
+            📸 Find Instagram
+        </a>
+    </div>
+</div>
+
+<!-- Tab Content -->
+<div>
+    {% if active_tab == 'follow_artists' %}
+        {% include 'features/follow_artists.html' %}
+    {% elif active_tab == 'randomize_playlists' %}
+        {% include 'features/randomize_playlists.html' %}
+    {% elif active_tab == 'find_concerts' %}
+        {% include 'features/find_concerts.html' %}
+    {% elif active_tab == 'find_instagram' %}
+        {% include 'features/find_instagram.html' %}
+    {% endif %}
+</div>
+
+<style>
+.tab-link {
+    padding: 12px 24px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.tab-link:hover {
+    color: var(--text-primary);
+    border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
+.tab-link.active {
+    color: var(--accent-green);
+    border-bottom-color: var(--accent-green);
+}
+</style>
+{% endblock %}

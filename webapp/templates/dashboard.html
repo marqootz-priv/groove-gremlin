@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Groove Gremlin{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 32px;">Dashboard</h1>
+
+{% if not spotify_connected %}
+<div class="alert alert-warning" style="margin-bottom: 32px;">
+    <strong>⚠️ Spotify Not Connected</strong><br>
+    <small>Connect your Spotify account in Settings to use these features.</small>
+</div>
+{% endif %}
+
+<!-- Dashboard Banner -->
+<div style="margin-bottom: 40px; border-radius: var(--radius); overflow: hidden;">
+    <img src="{{ url_for('static', filename='images/groove-gremlin-dashboard-banner.png') }}" 
+         alt="Groove Gremlin" 
+         style="width: 100%; height: auto; display: block;">
+</div>
+
+<!-- Feature Tiles -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-bottom: 32px;">
+    <!-- Follow Artists Tile -->
+    <div class="card feature-tile" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" 
+         onclick="quickAction('follow_artists', {include_top_artists: false})"
+         {% if not spotify_connected %}style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+        <div style="font-size: 3rem; margin-bottom: 16px;">🎤</div>
+        <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">Follow Artists</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+            Follow all artists from your liked tracks
+        </p>
+        <button class="btn btn-primary" style="width: 100%;" 
+                {% if not spotify_connected %}disabled{% endif %}>
+            Quick Start
+        </button>
+        <a href="{{ url_for('features', tab='follow_artists') }}" 
+           style="display: block; text-align: center; margin-top: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+            Advanced Options →
+        </a>
+    </div>
+
+    <!-- Randomize Playlists Tile -->
+    <div class="card feature-tile" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" 
+         onclick="quickAction('randomize_playlists')"
+         {% if not spotify_connected %}style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+        <div style="font-size: 3rem; margin-bottom: 16px;">🔀</div>
+        <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">Randomize Playlists</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+            Shuffle tracks in all your playlists
+        </p>
+        <button class="btn btn-primary" style="width: 100%;" 
+                {% if not spotify_connected %}disabled{% endif %}>
+            Quick Start
+        </button>
+        <a href="{{ url_for('features', tab='randomize_playlists') }}" 
+           style="display: block; text-align: center; margin-top: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+            Advanced Options →
+        </a>
+    </div>
+
+    <!-- Find Concerts Tile -->
+    <div class="card feature-tile" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" 
+         onclick="quickAction('find_concerts', {location: '', radius_miles: 50, months_ahead: 3})"
+         {% if not spotify_connected %}style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+        <div style="font-size: 3rem; margin-bottom: 16px;">🎵</div>
+        <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">Find Concerts</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+            Discover concerts for your followed artists
+        </p>
+        <button class="btn btn-primary" style="width: 100%;" 
+                {% if not spotify_connected %}disabled{% endif %}>
+            Quick Start
+        </button>
+        <a href="{{ url_for('features', tab='find_concerts') }}" 
+           style="display: block; text-align: center; margin-top: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+            Advanced Options →
+        </a>
+    </div>
+
+    <!-- Find Instagram Tile -->
+    <div class="card feature-tile" style="cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease;" 
+         onclick="quickAction('find_instagram')"
+         {% if not spotify_connected %}style="opacity: 0.6; cursor: not-allowed;"{% endif %}>
+        <div style="font-size: 3rem; margin-bottom: 16px;">📸</div>
+        <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 8px;">Find Instagram</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+            Find Instagram accounts for your artists
+        </p>
+        <button class="btn btn-primary" style="width: 100%;" 
+                {% if not spotify_connected %}disabled{% endif %}>
+            Quick Start
+        </button>
+        <a href="{{ url_for('features', tab='find_instagram') }}" 
+           style="display: block; text-align: center; margin-top: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+            Advanced Options →
+        </a>
+    </div>
+</div>
+
+<!-- Settings Button -->
+<div style="text-align: center; margin-top: 40px;">
+    <button class="button-secondary" onclick="showSettingsModal()" style="padding: 12px 24px;">
+        ⚙️ Settings
+    </button>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" class="modal-overlay">
+    <div class="card modal-content">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <h5 style="margin: 0;">Settings</h5>
+            <button onclick="closeSettingsModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0; width: 30px; height: 30px;">&times;</button>
+        </div>
+        <div>
+            <!-- Spotify Connection -->
+            <div style="margin-bottom: 24px;">
+                <strong style="display: block; margin-bottom: 8px;">Spotify:</strong>
+                {% if spotify_connected %}
+                    <span class="badge bg-success">Connected</span>
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 8px; margin-bottom: 12px;">
+                        Connected as: {{ current_user.spotify_username }}
+                    </p>
+                    <a href="{{ url_for('spotify_disconnect') }}" class="btn btn-sm" style="background: transparent; color: #e22134; border: 1px solid #e22134;">Disconnect</a>
+                {% else %}
+                    <span class="badge bg-secondary">Not Connected</span>
+                    <a href="{{ url_for('spotify_connect') }}" class="btn btn-sm btn-primary" style="margin-top: 8px;">Connect Spotify</a>
+                {% endif %}
+            </div>
+            
+            <!-- Instagram Connection -->
+            <div>
+                <strong style="display: block; margin-bottom: 8px;">Instagram:</strong>
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 12px;">
+                    Your Instagram credentials are used by the Apify actor that follows accounts automatically.
+                </p>
+                {% if current_user.instagram_session_id or current_user.instagram_username %}
+                    <span class="badge bg-success">Credentials Saved</span>
+                    {% if current_user.instagram_session_id %}
+                    <p style="color: #22c55e; font-size: 0.85rem; margin-top: 8px; margin-bottom: 4px;">
+                        ✓ Using Session ID (most reliable)
+                    </p>
+                    {% endif %}
+                    {% if current_user.instagram_username %}
+                    <p style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; margin-bottom: 12px;">
+                        Username: {{ current_user.instagram_username }}
+                    </p>
+                    {% endif %}
+                {% else %}
+                    <span class="badge bg-secondary">Not Set</span>
+                {% endif %}
+                
+                <form method="POST" action="{{ url_for('instagram_save') }}" style="margin-top: 12px;">
+                    <!-- Session ID (Recommended) -->
+                    <div style="background-color: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-sm); padding: 12px; margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #22c55e; font-size: 0.9rem;">
+                            🔑 Session ID (Recommended)
+                        </label>
+                        <input type="text" name="instagram_session_id" class="form-control" 
+                               placeholder="{% if current_user.instagram_session_id %}Session ID saved - enter new to update{% else %}Paste your sessionid cookie here{% endif %}" 
+                               style="width: 100%; font-family: monospace; font-size: 0.8rem;">
+                        <details style="margin-top: 8px;">
+                            <summary style="cursor: pointer; font-size: 0.75rem; color: var(--text-secondary);">How to get your Session ID</summary>
+                            <ol style="font-size: 0.75rem; color: var(--text-secondary); margin: 8px 0 0 0; padding-left: 20px; line-height: 1.6;">
+                                <li>Open <a href="https://www.instagram.com" target="_blank" style="color: var(--accent-green);">Instagram.com</a> and make sure you're logged in</li>
+                                <li>Press F12 (or Cmd+Option+I on Mac) to open Developer Tools</li>
+                                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <strong>instagram.com</strong></li>
+                                <li>Find the cookie named <code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 2px;">sessionid</code></li>
+                                <li>Double-click the value and copy it (long string of numbers and letters)</li>
+                            </ol>
+                        </details>
+                    </div>
+                    
+                    <!-- Username/Password (Fallback) -->
+                    <details style="margin-bottom: 12px;">
+                        <summary style="cursor: pointer; font-size: 0.85rem; color: var(--text-secondary);">
+                            Alternative: Username & Password (less reliable)
+                        </summary>
+                        <div style="margin-top: 12px;">
+                            <div style="margin-bottom: 8px;">
+                                <input type="text" name="instagram_username" class="form-control" 
+                                       placeholder="Instagram username" value="{{ current_user.instagram_username or '' }}" 
+                                       style="width: 100%;">
+                            </div>
+                            <div style="margin-bottom: 8px;">
+                                <input type="password" name="instagram_password" class="form-control" 
+                                       placeholder="{% if current_user.instagram_password %}Enter new password to update{% else %}Instagram password{% endif %}" 
+                                       style="width: 100%;">
+                            </div>
+                            <small style="color: #f59e0b; font-size: 0.75rem;">
+                                ⚠️ Username/password often gets blocked by Instagram from datacenter IPs. Session ID is much more reliable.
+                            </small>
+                        </div>
+                    </details>
+                    
+                    <button class="btn btn-primary btn-sm" type="submit" style="width: 100%;">Save Instagram Credentials</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.feature-tile:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.show {
+    display: flex;
+}
+
+.modal-content {
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function quickAction(jobType, data) {
+    data = data || {};
+    {% if not spotify_connected %}
+    alert('Please connect your Spotify account in Settings first.');
+    return;
+    {% endif %}
+    
+    var endpoint = jobType.replace('_', '-');
+    fetch('/jobs/' + endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            window.location.href = '/features?tab=' + jobType;
+        }
+    })
+    .catch(function(error) {
+        alert('Error: ' + error);
+    });
+}
+
+function showSettingsModal() {
+    document.getElementById('settingsModal').classList.add('show');
+}
+
+function closeSettingsModal() {
+    document.getElementById('settingsModal').classList.remove('show');
+}
+
+var modal = document.getElementById('settingsModal');
+if (modal) {
+    modal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeSettingsModal();
+        }
+    });
+}
+</script>
+{% endblock %}

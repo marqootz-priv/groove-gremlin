@@ -1,0 +1,185 @@
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h5>Follow Artists</h5>
+    </div>
+    <div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px;">
+            Automatically follow all artists from your liked/favorited tracks on Spotify.
+        </p>
+        
+        <form id="followArtistsForm" onsubmit="submitFollowArtists(event)">
+            <div style="margin-bottom: 20px;">
+                <label class="form-label">
+                    <input type="checkbox" id="includeTopArtists" name="include_top_artists" value="true">
+                    Include top artists (short, medium, and long term)
+                </label>
+                <small style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; display: block;">
+                    This will also follow artists from your top artists across all time ranges
+                </small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" {% if not spotify_connected %}disabled{% endif %}>
+                Start Following Artists
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Job Queue -->
+<div class="card">
+    <div class="card-header">
+        <h5>Job Queue</h5>
+    </div>
+    <div>
+        {% if jobs %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Options</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-table-body">
+                    {% for job in jobs %}
+                    <tr data-job-id="{{ job.id }}">
+                        <td>
+                            <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" data-job-status="{{ job.id }}">
+                                {{ job.status }}
+                            </span>
+                        </td>
+                        <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else 'N/A' }}</td>
+                        <td>
+                            {% if job.input_data %}
+                                {% set input = job.input_data|from_json %}
+                                {% if input.get('include_top_artists') %}
+                                    <small style="color: var(--text-secondary);">Including top artists</small>
+                                {% else %}
+                                    <small style="color: var(--text-secondary);">Liked tracks only</small>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td data-job-actions="{{ job.id }}">
+                            <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                            {% if job.status == 'running' or job.status == 'pending' %}
+                            <button onclick="cancelJob({{ job.id }})" class="btn btn-sm" style="background-color: rgba(226, 33, 52, 0.2); border: 1px solid rgba(226, 33, 52, 0.5); color: #e22134; margin-left: 8px;">Kill</button>
+                            {% endif %}
+                            {% if job.status == 'completed' %}
+                            <a href="{{ url_for('job_download', job_id=job.id) }}" class="btn btn-sm btn-outline-primary" style="margin-left: 8px;">Download</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color: var(--text-secondary);">No jobs yet. Start a job above to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function submitFollowArtists(event) {
+    event.preventDefault();
+    const includeTop = document.getElementById('includeTopArtists').checked;
+    
+    runJob('follow_artists', {include_top_artists: includeTop});
+}
+
+function runJob(jobType, data = {}) {
+    const endpoint = jobType.replace('_', '-');
+    fetch(`/jobs/${endpoint}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(() => location.reload(), 1000);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+// Auto-refresh for running jobs
+let jobStatusPollInterval = null;
+function startPollingIfNeeded() {
+    const statusBadges = document.querySelectorAll('span[data-job-status]');
+    let hasRunning = false;
+    statusBadges.forEach(badge => {
+        const status = badge.textContent.trim().toLowerCase();
+        if (status === 'running' || status === 'pending') {
+            hasRunning = true;
+        }
+    });
+    
+    if (hasRunning && !jobStatusPollInterval) {
+        jobStatusPollInterval = setInterval(updateJobStatuses, 3000);
+        updateJobStatuses();
+    }
+}
+
+function updateJobStatuses() {
+    fetch('/api/jobs/status')
+        .then(response => response.json())
+        .then(data => {
+            const jobs = data.jobs || [];
+            jobs.forEach(job => {
+                if (job.job_type === 'follow_artists') {
+                    const row = document.querySelector(`tr[data-job-id="${job.id}"]`);
+                    if (row) {
+                        const statusBadge = row.querySelector(`span[data-job-status="${job.id}"]`);
+                        if (statusBadge) {
+                            statusBadge.textContent = job.status;
+                            statusBadge.className = 'badge bg-' + 
+                                (job.status === 'completed' ? 'success' : 
+                                 job.status === 'failed' ? 'danger' : 
+                                 job.status === 'running' ? 'warning' : 'secondary');
+                        }
+                    }
+                }
+            });
+            
+            const hasRunningJobs = jobs.some(job => job.job_type === 'follow_artists' && (job.status === 'running' || job.status === 'pending'));
+            if (!hasRunningJobs && jobStatusPollInterval) {
+                clearInterval(jobStatusPollInterval);
+                jobStatusPollInterval = null;
+            }
+        });
+}
+
+startPollingIfNeeded();
+
+function cancelJob(jobId) {
+    if (!confirm('Are you sure you want to force kill this job? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch(`/api/jobs/${jobId}/cancel`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(() => location.reload(), 500);
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling job:', error);
+        alert('Error cancelling job. Please try again.');
+    });
+}
+</script>

@@ -1,0 +1,215 @@
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h5>Find Instagram Accounts</h5>
+    </div>
+    <div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px;">
+            Search for Instagram accounts for artists you follow on Spotify. Only accounts that are found will be included.
+        </p>
+        <div class="alert" style="background-color: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #3b82f6; margin-bottom: 24px; padding: 12px; border-radius: var(--radius-sm);">
+            <strong>📋 How it works:</strong><br>
+            1. Collects your followed artists from Spotify<br>
+            2. Searches for Instagram accounts (only includes found accounts, no guessing)<br>
+            3. Optionally runs your Apify actor automatically to follow the accounts<br>
+            4. The Apify actor logs into Instagram and follows all found accounts
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+            <label class="form-label">Limit number of artists (optional, leave empty for all):</label>
+            <input type="number" id="artist-limit" class="form-control" placeholder="e.g. 100" min="1" max="5000" style="max-width: 200px;">
+            <small style="color: var(--text-secondary); display: block; margin-top: 4px;">
+                Useful for large lists. Search takes ~2 seconds per artist.
+            </small>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+            <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="run-apify" checked style="cursor: pointer;">
+                <span>Automatically run Apify actor after finding accounts</span>
+            </label>
+            <small style="color: var(--text-secondary); display: block; margin-top: 4px; margin-left: 24px;">
+                Requires Instagram credentials in Settings. The actor will automatically follow all found accounts.
+            </small>
+        </div>
+        
+        <div id="apify-credentials-warning" style="display: none; margin-bottom: 16px; background-color: rgba(226, 33, 52, 0.1); border: 1px solid rgba(226, 33, 52, 0.3); color: #e22134; padding: 12px; border-radius: var(--radius-sm);">
+            <strong>⚠️ Missing Credentials:</strong> To run Apify automatically, you need to add your Instagram username and password in Settings.
+        </div>
+        
+        <button class="btn btn-primary" onclick="runInstagramJob()" {% if not spotify_connected %}disabled{% endif %}>
+            Find Instagram Accounts
+        </button>
+    </div>
+</div>
+
+<!-- Job Queue -->
+<div class="card">
+    <div class="card-header">
+        <h5>Job Queue</h5>
+    </div>
+    <div>
+        {% if jobs %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-table-body">
+                    {% for job in jobs %}
+                    <tr data-job-id="{{ job.id }}">
+                        <td>
+                            <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" data-job-status="{{ job.id }}">
+                                {{ job.status }}
+                            </span>
+                        </td>
+                        <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else 'N/A' }}</td>
+                        <td data-job-actions="{{ job.id }}">
+                            <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                            {% if job.status == 'running' or job.status == 'pending' %}
+                            <button onclick="cancelJob({{ job.id }})" class="btn btn-sm" style="background-color: rgba(226, 33, 52, 0.2); border: 1px solid rgba(226, 33, 52, 0.5); color: #e22134; margin-left: 8px;">Kill</button>
+                            {% endif %}
+                            {% if job.status == 'completed' %}
+                            <a href="{{ url_for('job_download', job_id=job.id) }}" class="btn btn-sm btn-outline-primary" style="margin-left: 8px;">Download</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color: var(--text-secondary);">No jobs yet. Start a job above to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Check if Instagram credentials are set (passed from backend)
+var hasInstagramCredentials = {{ 'true' if has_instagram_credentials else 'false' }};
+
+// Show/hide warning based on checkbox AND credential status
+function updateApifyWarning() {
+    var checkbox = document.getElementById('run-apify');
+    var warning = document.getElementById('apify-credentials-warning');
+    if (checkbox && checkbox.checked && !hasInstagramCredentials) {
+        warning.style.display = 'block';
+    } else {
+        warning.style.display = 'none';
+    }
+}
+
+if (document.getElementById('run-apify')) {
+    document.getElementById('run-apify').addEventListener('change', updateApifyWarning);
+}
+
+// Check on page load since checkbox is now checked by default
+updateApifyWarning();
+
+function runInstagramJob() {
+    var limitInput = document.getElementById('artist-limit');
+    var limit = limitInput.value ? parseInt(limitInput.value) : null;
+    var runApify = document.getElementById('run-apify').checked;
+    
+    var data = {
+        limit: limit,
+        run_apify: runApify
+    };
+    
+    fetch('/jobs/find-instagram', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(function() { location.reload(); }, 1000);
+        }
+    })
+    .catch(function(error) {
+        alert('Error: ' + error);
+    });
+}
+
+// Auto-refresh for running jobs
+var jobStatusPollInterval = null;
+function startPollingIfNeeded() {
+    var statusBadges = document.querySelectorAll('span[data-job-status]');
+    var hasRunning = false;
+    statusBadges.forEach(function(badge) {
+        var status = badge.textContent.trim().toLowerCase();
+        if (status === 'running' || status === 'pending') {
+            hasRunning = true;
+        }
+    });
+    
+    if (hasRunning && !jobStatusPollInterval) {
+        jobStatusPollInterval = setInterval(updateJobStatuses, 3000);
+        updateJobStatuses();
+    }
+}
+
+function updateJobStatuses() {
+    fetch('/api/jobs/status')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var jobs = data.jobs || [];
+            jobs.forEach(function(job) {
+                if (job.job_type === 'find_instagram') {
+                    var row = document.querySelector('tr[data-job-id="' + job.id + '"]');
+                    if (row) {
+                        var statusBadge = row.querySelector('span[data-job-status="' + job.id + '"]');
+                        if (statusBadge) {
+                            statusBadge.textContent = job.status;
+                            statusBadge.className = 'badge bg-' + 
+                                (job.status === 'completed' ? 'success' : 
+                                 job.status === 'failed' ? 'danger' : 
+                                 job.status === 'running' ? 'warning' : 'secondary');
+                        }
+                    }
+                }
+            });
+            
+            var hasRunningJobs = jobs.some(function(job) { 
+                return job.job_type === 'find_instagram' && (job.status === 'running' || job.status === 'pending'); 
+            });
+            if (!hasRunningJobs && jobStatusPollInterval) {
+                clearInterval(jobStatusPollInterval);
+                jobStatusPollInterval = null;
+            }
+        });
+}
+
+startPollingIfNeeded();
+
+function cancelJob(jobId) {
+    if (!confirm('Are you sure you want to force kill this job? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch('/api/jobs/' + jobId + '/cancel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(function() { location.reload(); }, 500);
+        }
+    })
+    .catch(function(error) {
+        console.error('Error cancelling job:', error);
+        alert('Error cancelling job. Please try again.');
+    });
+}
+</script>

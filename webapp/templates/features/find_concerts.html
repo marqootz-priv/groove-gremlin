@@ -1,0 +1,210 @@
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h5>Find Concerts</h5>
+    </div>
+    <div>
+        <p style="color: var(--text-secondary); margin-bottom: 24px;">
+            Discover upcoming concerts for artists you follow on Spotify.
+        </p>
+        
+        <form id="concertsForm" onsubmit="submitConcerts(event)">
+            <div style="margin-bottom: 20px;">
+                <label class="form-label">Location (City, State, Country)</label>
+                <input type="text" id="concertLocation" class="form-control" 
+                       placeholder="e.g., San Francisco, CA or New York, NY, USA" 
+                       value="">
+                <small style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; display: block;">
+                    Enter a city name, optionally with state/country. Leave empty to search all locations.
+                </small>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label class="form-label">Search Radius (miles)</label>
+                <input type="number" id="concertRadius" class="form-control" 
+                       placeholder="50" min="0" max="1000" value="50">
+                <small style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; display: block;">
+                    Leave empty or 0 to search all locations (ignores radius)
+                </small>
+            </div>
+            
+            <div style="margin-bottom: 24px;">
+                <label class="form-label">Months Ahead</label>
+                <input type="number" id="concertMonths" class="form-control" 
+                       placeholder="3" min="1" max="24" value="3">
+                <small style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 4px; display: block;">
+                    How many months in the future to search (1-24)
+                </small>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" {% if not spotify_connected %}disabled{% endif %}>
+                Find Concerts
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Job Queue -->
+<div class="card">
+    <div class="card-header">
+        <h5>Job Queue</h5>
+    </div>
+    <div>
+        {% if jobs %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Options</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-table-body">
+                    {% for job in jobs %}
+                    <tr data-job-id="{{ job.id }}">
+                        <td>
+                            <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" data-job-status="{{ job.id }}">
+                                {{ job.status }}
+                            </span>
+                        </td>
+                        <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else 'N/A' }}</td>
+                        <td>
+                            {% if job.input_data %}
+                                {% set input = job.input_data|from_json %}
+                                <small style="color: var(--text-secondary);">
+                                    {% if input.get('location') %}{{ input.get('location') }}{% else %}All locations{% endif %},
+                                    {% if input.get('radius_miles') %}{{ input.get('radius_miles') }}mi{% else %}no radius{% endif %},
+                                    {{ input.get('months_ahead', 3) }}mo
+                                </small>
+                            {% endif %}
+                        </td>
+                        <td data-job-actions="{{ job.id }}">
+                            <a href="{{ url_for('job_status', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">View</a>
+                            {% if job.status == 'running' or job.status == 'pending' %}
+                            <button onclick="cancelJob({{ job.id }})" class="btn btn-sm" style="background-color: rgba(226, 33, 52, 0.2); border: 1px solid rgba(226, 33, 52, 0.5); color: #e22134; margin-left: 8px;">Kill</button>
+                            {% endif %}
+                            {% if job.status == 'completed' %}
+                            <a href="{{ url_for('job_download', job_id=job.id) }}" class="btn btn-sm btn-outline-primary" style="margin-left: 8px;">Download</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="color: var(--text-secondary);">No jobs yet. Start a job above to get started!</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function submitConcerts(event) {
+    event.preventDefault();
+    
+    const location = document.getElementById('concertLocation').value.trim();
+    const radius = parseInt(document.getElementById('concertRadius').value) || 0;
+    const months = parseInt(document.getElementById('concertMonths').value) || 3;
+    
+    runJob('find_concerts', {
+        location: location,
+        radius_miles: radius,
+        months_ahead: months
+    });
+}
+
+function runJob(jobType, data = {}) {
+    const endpoint = jobType.replace('_', '-');
+    fetch(`/jobs/${endpoint}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(() => location.reload(), 1000);
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+
+// Auto-refresh for running jobs
+let jobStatusPollInterval = null;
+function startPollingIfNeeded() {
+    const statusBadges = document.querySelectorAll('span[data-job-status]');
+    let hasRunning = false;
+    statusBadges.forEach(badge => {
+        const status = badge.textContent.trim().toLowerCase();
+        if (status === 'running' || status === 'pending') {
+            hasRunning = true;
+        }
+    });
+    
+    if (hasRunning && !jobStatusPollInterval) {
+        jobStatusPollInterval = setInterval(updateJobStatuses, 3000);
+        updateJobStatuses();
+    }
+}
+
+function updateJobStatuses() {
+    fetch('/api/jobs/status')
+        .then(response => response.json())
+        .then(data => {
+            const jobs = data.jobs || [];
+            jobs.forEach(job => {
+                if (job.job_type === 'find_concerts') {
+                    const row = document.querySelector(`tr[data-job-id="${job.id}"]`);
+                    if (row) {
+                        const statusBadge = row.querySelector(`span[data-job-status="${job.id}"]`);
+                        if (statusBadge) {
+                            statusBadge.textContent = job.status;
+                            statusBadge.className = 'badge bg-' + 
+                                (job.status === 'completed' ? 'success' : 
+                                 job.status === 'failed' ? 'danger' : 
+                                 job.status === 'running' ? 'warning' : 'secondary');
+                        }
+                    }
+                }
+            });
+            
+            const hasRunningJobs = jobs.some(job => job.job_type === 'find_concerts' && (job.status === 'running' || job.status === 'pending'));
+            if (!hasRunningJobs && jobStatusPollInterval) {
+                clearInterval(jobStatusPollInterval);
+                jobStatusPollInterval = null;
+            }
+        });
+}
+
+startPollingIfNeeded();
+
+function cancelJob(jobId) {
+    if (!confirm('Are you sure you want to force kill this job? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch(`/api/jobs/${jobId}/cancel`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            setTimeout(() => location.reload(), 500);
+        }
+    })
+    .catch(error => {
+        console.error('Error cancelling job:', error);
+        alert('Error cancelling job. Please try again.');
+    });
+}
+</script>

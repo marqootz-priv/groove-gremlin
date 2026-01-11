@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Groove Gremlin{% endblock %}</title>
+    <style>
+        /* ========== CSS RESET ========== */
+        *,
+        *::before,
+        *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
+        html,
+        body {
+          height: 100%;
+        }
+
+        /* ========== VARIABLES ========== */
+        :root {
+          --bg-dark: #0f0f0f;
+          --bg-surface: #181818;
+          --accent-green: #1db954;
+          --text-primary: #f5f5f5;
+          --text-secondary: #b3b3b3;
+          --radius: 12px;
+          --radius-sm: 8px;
+          --max-width: 1100px;
+        }
+
+        /* ========== BASE STYLES ========== */
+        body {
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+            Helvetica, Arial, sans-serif;
+          background-color: var(--bg-dark);
+          color: var(--text-primary);
+          line-height: 1.5;
+        }
+
+        a {
+          color: var(--accent-green);
+          text-decoration: none;
+        }
+
+        a:hover {
+          color: var(--accent-green);
+          opacity: 0.8;
+        }
+
+        /* ========== PAGE LAYOUT ========== */
+        .page {
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+
+        /* ========== HEADER ========== */
+        .header {
+          width: 100%;
+          padding: 24px;
+          display: flex;
+          justify-content: center;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .header-inner {
+          width: 100%;
+          max-width: var(--max-width);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+
+        .logo {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-size: 1.25rem;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+          color: var(--text-primary);
+        }
+
+        .logo img {
+          height: 32px;
+          width: 32px;
+        }
+
+        .nav-links {
+          display: flex;
+          gap: 24px;
+          align-items: center;
+        }
+
+        .nav-links a {
+          color: var(--text-secondary);
+          font-weight: 500;
+          transition: color 0.15s ease;
+        }
+
+        .nav-links a:hover {
+          color: var(--text-primary);
+        }
+
+        /* ========== MAIN CONTENT ========== */
+        .main-content {
+          flex: 1;
+          padding: 40px 24px;
+          max-width: var(--max-width);
+          width: 100%;
+          margin: 0 auto;
+        }
+
+        /* ========== CARDS ========== */
+        .card {
+          background-color: var(--bg-surface);
+          border-radius: var(--radius);
+          padding: 28px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          margin-bottom: 24px;
+        }
+
+        .card-header {
+          margin-bottom: 20px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card-header h5 {
+          font-size: 1.1rem;
+          font-weight: 600;
+          margin: 0;
+        }
+
+        /* ========== BUTTONS ========== */
+        .button-primary {
+          background-color: var(--accent-green);
+          color: #000;
+          padding: 14px 28px;
+          border-radius: 999px;
+          font-weight: 700;
+          border: none;
+          cursor: pointer;
+          transition: transform 0.15s ease, opacity 0.15s ease;
+          text-decoration: none;
+          display: inline-block;
+        }
+
+        .button-primary:hover {
+          opacity: 0.9;
+          transform: translateY(-1px);
+          color: #000;
+        }
+
+        .button-primary:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          transform: none;
+        }
+
+        .button-secondary {
+          color: var(--text-secondary);
+          font-weight: 500;
+          padding: 14px 28px;
+          border-radius: 999px;
+          background: transparent;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-decoration: none;
+          display: inline-block;
+        }
+
+        .button-secondary:hover {
+          color: var(--text-primary);
+          border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn {
+          padding: 10px 20px;
+          border-radius: var(--radius-sm);
+          font-weight: 600;
+          border: none;
+          cursor: pointer;
+          transition: all 0.15s ease;
+          text-decoration: none;
+          display: inline-block;
+        }
+
+        .btn-primary {
+          background-color: var(--accent-green);
+          color: #000;
+        }
+
+        .btn-primary:hover {
+          opacity: 0.9;
+          color: #000;
+        }
+
+        .btn-outline-primary {
+          background: transparent;
+          color: var(--accent-green);
+          border: 1px solid var(--accent-green);
+        }
+
+        .btn-outline-primary:hover {
+          background-color: var(--accent-green);
+          color: #000;
+        }
+
+        .btn-sm {
+          padding: 6px 12px;
+          font-size: 0.875rem;
+        }
+
+        /* ========== FORMS ========== */
+        .form-control {
+          background-color: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: var(--radius-sm);
+          padding: 12px 16px;
+          color: var(--text-primary);
+          width: 100%;
+          font-size: 1rem;
+        }
+
+        .form-control:focus {
+          outline: none;
+          border-color: var(--accent-green);
+          background-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .form-label {
+          display: block;
+          margin-bottom: 8px;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+
+        /* ========== BADGES ========== */
+        .badge {
+          padding: 4px 12px;
+          border-radius: 999px;
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+
+        .bg-success {
+          background-color: var(--accent-green);
+          color: #000;
+        }
+
+        .bg-secondary {
+          background-color: rgba(255, 255, 255, 0.1);
+          color: var(--text-secondary);
+        }
+
+        .bg-warning {
+          background-color: #ffa500;
+          color: #000;
+        }
+
+        .bg-danger {
+          background-color: #e22134;
+          color: #fff;
+        }
+
+        /* ========== TABLES ========== */
+        .table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
+        .table th {
+          text-align: left;
+          padding: 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          color: var(--text-secondary);
+          font-weight: 600;
+          font-size: 0.875rem;
+        }
+
+        .table td {
+          padding: 12px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .table tbody tr:hover {
+          background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        /* ========== ALERTS ========== */
+        .alert {
+          padding: 16px;
+          border-radius: var(--radius-sm);
+          margin-bottom: 20px;
+        }
+
+        .alert-warning {
+          background-color: rgba(255, 165, 0, 0.1);
+          border: 1px solid rgba(255, 165, 0, 0.3);
+          color: #ffa500;
+        }
+
+        .alert-info {
+          background-color: rgba(29, 185, 84, 0.1);
+          border: 1px solid rgba(29, 185, 84, 0.3);
+          color: var(--accent-green);
+        }
+
+        /* ========== UTILITY CARDS ========== */
+        .utility-card {
+          background-color: var(--bg-surface);
+          border-radius: var(--radius);
+          padding: 28px;
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .utility-title {
+          font-size: 1.1rem;
+          font-weight: 600;
+          margin-bottom: 8px;
+        }
+
+        .utility-text {
+          font-size: 0.95rem;
+          color: var(--text-secondary);
+        }
+
+        /* ========== FOOTER ========== */
+        .footer {
+          padding: 32px 24px;
+          display: flex;
+          justify-content: center;
+          border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer-inner {
+          width: 100%;
+          max-width: var(--max-width);
+          text-align: center;
+          font-size: 0.85rem;
+          color: var(--text-secondary);
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 768px) {
+          .header {
+            padding: 16px;
+          }
+
+          .main-content {
+            padding: 24px 16px;
+          }
+
+          .nav-links {
+            gap: 16px;
+            font-size: 0.9rem;
+          }
+
+          .logo {
+            font-size: 1.1rem;
+          }
+
+          .logo img {
+            height: 28px;
+            width: 28px;
+          }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="page">
+        <header class="header">
+            <div class="header-inner">
+                <a href="{{ url_for('index') }}" class="logo">
+                    <img src="{{ url_for('static', filename='images/groove-gremlin-icon.png') }}" alt="Groove Gremlin">
+                    <span>Groove Gremlin</span>
+                </a>
+                <nav class="nav-links">
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                        <a href="{{ url_for('features', tab='follow_artists') }}">Features</a>
+                        <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+                    {% else %}
+                        <a href="{{ url_for('login') }}">Login</a>
+                        <a href="{{ url_for('register') }}">Register</a>
+                    {% endif %}
+                </nav>
+            </div>
+        </header>
+
+        <main class="main-content">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-info" role="alert">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="footer">
+            <div class="footer-inner">
+                <p>&copy; 2025 Groove Gremlin. Automate your Spotify experience.</p>
+            </div>
+        </footer>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

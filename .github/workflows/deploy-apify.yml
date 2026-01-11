@@ -1,0 +1,40 @@
+name: Deploy to Apify
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apify_actor/**'
+      - '.github/workflows/deploy-apify.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Apify CLI
+        run: npm install -g apify-cli
+
+      - name: Login to Apify
+        run: |
+          echo "${{ secrets.APIFY_API_TOKEN }}" | apify login --token
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+
+      - name: Deploy Apify Actor
+        run: |
+          cd apify_actor
+          echo "📦 Pushing to Apify..."
+          apify push
+          echo "✅ Apify actor deployed successfully"
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}

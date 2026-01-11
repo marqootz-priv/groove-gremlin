@@ -1,0 +1,64 @@
+name: Deploy to Heroku and Apify
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-heroku:
+    name: Deploy Web App to Heroku
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.modified, 'webapp/') || contains(github.event.head_commit.added, 'webapp/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Deploy to Heroku
+        uses: akhileshns/heroku-deploy@v3.13.15
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: "groove-gremlin"
+          heroku_email: ${{secrets.HEROKU_EMAIL}}
+          appdir: "webapp"
+          usedocker: false
+          healthcheck: "https://groove-gremlin.herokuapp.com/"
+          check_healthcheck_retries: 10
+          delay: 10
+
+  deploy-apify:
+    name: Deploy Actor to Apify
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.modified, 'apify_actor/') || contains(github.event.head_commit.added, 'apify_actor/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Apify CLI
+        run: npm install -g apify-cli
+
+      - name: Login to Apify
+        run: |
+          echo "${{ secrets.APIFY_API_TOKEN }}" | apify login --token
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+
+      - name: Deploy Apify Actor
+        run: |
+          cd apify_actor
+          echo "📦 Pushing to Apify..."
+          apify push
+          echo "✅ Apify actor deployed successfully"
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}

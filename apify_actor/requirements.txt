@@ -1,0 +1,8 @@
+# Apify SDK
+apify>=1.0.0
+
+# Instagram API library (uses mobile API, not browser)
+instagrapi>=2.0.0
+
+# Required dependencies
+requests>=2.31.0

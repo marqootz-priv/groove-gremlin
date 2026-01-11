@@ -1,0 +1,80 @@
+{
+  "actorSpecification": 1,
+  "name": "spotify-artists-instagram-follow",
+  "version": "1.0",
+  "title": "Follow Spotify Artists on Instagram",
+  "description": "Follows Instagram accounts from a provided list of URLs with rate limiting and safety measures.",
+  "storages": {
+    "dataset": {
+      "itemCount": 1
+    }
+  },
+  "input": {
+    "title": "Instagram Follow Input",
+    "type": "object",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "urls": {
+          "title": "Instagram URLs",
+          "type": "array",
+          "description": "List of Instagram profile URLs to follow (optional if artist_names provided)",
+          "editor": "json",
+          "default": []
+        },
+        "artist_names": {
+          "title": "Artist Names",
+          "type": "array",
+          "description": "List of artist names to search for on Instagram and follow",
+          "editor": "json",
+          "default": []
+        },
+        "instagram_username": {
+          "title": "Instagram Username",
+          "type": "string",
+          "description": "Your Instagram username",
+          "editor": "textfield"
+        },
+        "instagram_password": {
+          "title": "Instagram Password",
+          "type": "string",
+          "description": "Your Instagram password",
+          "editor": "textfield",
+          "isSecret": true
+        },
+        "delay_min": {
+          "title": "Minimum Delay (seconds)",
+          "type": "integer",
+          "description": "Minimum delay between follows in seconds",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 10
+        },
+        "delay_max": {
+          "title": "Maximum Delay (seconds)",
+          "type": "integer",
+          "description": "Maximum delay between follows in seconds",
+          "default": 4,
+          "minimum": 2,
+          "maximum": 20
+        },
+        "max_follows": {
+          "title": "Max Follows Per Run",
+          "type": "integer",
+          "description": "Maximum number of accounts to follow in this run (safety limit)",
+          "default": 40,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "headless": {
+          "title": "Run Headless",
+          "type": "boolean",
+          "description": "Run browser in headless mode (no visible window)",
+          "default": false
+        }
+      },
+      "required": ["instagram_username", "instagram_password"]
+    }
+  },
+  "dockerfile": "./Dockerfile"
+}

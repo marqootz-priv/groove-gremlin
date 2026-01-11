@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block title %}Job Details - Groove Gremlin{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto;">
+    <h2 style="font-size: 2rem; font-weight: 700; margin-bottom: 32px;">Job Details</h2>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5 style="margin: 0;">Job #{{ job.id }} - {{ job.job_type.replace('_', ' ').title() }}</h5>
+        </div>
+        <div>
+            <p style="margin-bottom: 12px;">
+                <strong>Status:</strong> 
+                <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" style="margin-left: 8px;" id="status-badge">
+                    {{ job.status }}
+                </span>
+            </p>
+            <p style="margin-bottom: 12px; color: var(--text-secondary);">
+                <strong style="color: var(--text-primary);">Created:</strong> {{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') if job.created_at else 'N/A' }}
+            </p>
+            {% if job.completed_at %}
+            <p style="margin-bottom: 12px; color: var(--text-secondary);">
+                <strong style="color: var(--text-primary);">Completed:</strong> <span id="completed-time">{{ job.completed_at.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+            </p>
+            {% endif %}
+            
+            <!-- Progress Bar -->
+            {% if job.status == 'running' or job.progress_percent > 0 %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <div style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <strong id="progress-message">{{ job.progress_message or 'Processing...' }}</strong>
+                    <span id="progress-percent" style="color: var(--text-secondary);">{{ job.progress_percent or 0 }}%</span>
+                </div>
+                <div style="background-color: rgba(255, 255, 255, 0.1); border-radius: 999px; height: 8px; overflow: hidden;">
+                    <div id="progress-bar" style="background-color: var(--accent-green); height: 100%; width: {{ job.progress_percent or 0 }}%; transition: width 0.3s ease;"></div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Apify Run Status (for find_instagram jobs) -->
+            {% if job.job_type == 'find_instagram' and output_data and output_data.get('apify_run_id') %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <div id="apify-status-section">
+                <h6 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                    <span>🤖 Apify Actor Status</span>
+                    <span id="apify-loading" style="display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2); border-top: 2px solid var(--accent-green); border-radius: 50%; animation: spin 1s linear infinite;"></span>
+                </h6>
+                
+                <div id="apify-status-content" style="background-color: rgba(255, 255, 255, 0.03); border-radius: var(--radius-sm); padding: 16px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.85rem;">Actor Status:</span><br>
+                            <span id="apify-display-status" class="badge bg-secondary">Loading...</span>
+                        </div>
+                        <div>
+                            <span style="color: var(--text-secondary); font-size: 0.85rem;">Duration:</span><br>
+                            <span id="apify-duration" style="font-family: monospace;">--</span>
+                        </div>
+                    </div>
+                    
+                    <div id="apify-results" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
+                            <div style="background-color: rgba(34, 197, 94, 0.1); padding: 12px; border-radius: var(--radius-sm);">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #22c55e;" id="apify-followed">0</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Followed</div>
+                            </div>
+                            <div style="background-color: rgba(226, 33, 52, 0.1); padding: 12px; border-radius: var(--radius-sm);">
+                                <div style="font-size: 1.5rem; font-weight: 700; color: #e22134;" id="apify-failed">0</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Failed</div>
+                            </div>
+                            <div style="background-color: rgba(255, 255, 255, 0.1); padding: 12px; border-radius: var(--radius-sm);">
+                                <div style="font-size: 1.5rem; font-weight: 700;" id="apify-total">0</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">Total</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 12px;">
+                        <a href="{{ output_data.get('apify_run_url') }}" target="_blank" style="color: var(--accent-green); text-decoration: none; font-size: 0.9rem;">
+                            View full Apify logs →
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <style>
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            </style>
+            {% endif %}
+            
+            <!-- Execution Log Toggle -->
+            {% if job.execution_log or job.status == 'running' %}
+            <div style="margin-top: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="show-logs" style="cursor: pointer;">
+                    <span style="color: var(--text-secondary); font-size: 0.9rem;">Show execution logs (for power users)</span>
+                </label>
+                <div id="execution-log-container" style="display: none; margin-top: 12px;">
+                    <pre id="execution-log" style="background-color: rgba(0, 0, 0, 0.3); padding: 16px; border-radius: var(--radius-sm); overflow-x: auto; font-size: 0.75rem; color: var(--text-secondary); font-family: 'Monaco', 'Menlo', 'Courier New', monospace; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">{{ job.execution_log or 'No logs yet...' }}</pre>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if job.status == 'completed' and output_data %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <h6 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px;">Results:</h6>
+            
+            {% if job.job_type == 'find_instagram' %}
+                {% if output_data.get('apify_run_url') and not output_data.get('apify_run_id') %}
+                <div class="alert" style="background-color: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; margin-bottom: 16px; padding: 12px; border-radius: var(--radius-sm);">
+                    <strong>✅ Apify Actor Started!</strong><br>
+                    <small>Found {{ output_data.get('found_count', 0) }} Instagram accounts and started your Apify actor to follow them.</small><br>
+                    <a href="{{ output_data.get('apify_run_url') }}" target="_blank" style="color: #22c55e; text-decoration: underline; margin-top: 8px; display: inline-block;">View Apify Run →</a>
+                </div>
+                {% elif output_data.get('apify_error') %}
+                <div class="alert" style="background-color: rgba(226, 33, 52, 0.1); border: 1px solid rgba(226, 33, 52, 0.3); color: #e22134; margin-bottom: 16px; padding: 12px; border-radius: var(--radius-sm);">
+                    <strong>⚠️ Apify Error:</strong><br>
+                    <small>{{ output_data.get('apify_error') }}</small>
+                </div>
+                {% endif %}
+                <p style="color: var(--text-secondary); margin-bottom: 12px;">
+                    Found <strong>{{ output_data.get('found_count', 0) }}</strong> Instagram accounts out of <strong>{{ output_data.get('artists_checked', 0) }}</strong> artists searched.
+                </p>
+            {% endif %}
+            
+            <details style="margin-top: 16px;">
+                <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.9rem;">Show raw output data</summary>
+                <pre style="background-color: rgba(255, 255, 255, 0.05); padding: 16px; border-radius: var(--radius-sm); overflow-x: auto; font-size: 0.875rem; color: var(--text-secondary); margin-top: 8px;"><code>{{ output_data | tojsonfilter }}</code></pre>
+            </details>
+            <a href="{{ url_for('job_download', job_id=job.id) }}" class="btn btn-primary" style="margin-top: 16px;">
+                Download Results (JSON)
+            </a>
+            {% elif job.status == 'failed' and output_data %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <h6 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px;">Error:</h6>
+            <div class="alert" style="background-color: rgba(226, 33, 52, 0.1); border: 1px solid rgba(226, 33, 52, 0.3); color: #e22134;">
+                {{ output_data.get('error', 'Unknown error') }}
+            </div>
+            {% elif job.status == 'running' %}
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <div class="alert alert-info">
+                Job is currently running. Progress updates automatically.
+            </div>
+            <button id="cancel-job-btn" class="btn" style="background-color: rgba(226, 33, 52, 0.2); border: 1px solid rgba(226, 33, 52, 0.5); color: #e22134; margin-top: 12px;" onclick="cancelJob()">
+                Force Kill Job
+            </button>
+            {% endif %}
+            
+            <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <a href="{{ url_for('dashboard') }}" class="button-secondary">Back to Dashboard</a>
+        </div>
+    </div>
+</div>
+
+<script>
+var jobId = {{ job.id }};
+var pollInterval = null;
+var apifyPollInterval = null;
+
+// Toggle execution logs
+var showLogsCheckbox = document.getElementById('show-logs');
+if (showLogsCheckbox) {
+    showLogsCheckbox.addEventListener('change', function(e) {
+        var container = document.getElementById('execution-log-container');
+        if (container) {
+            container.style.display = e.target.checked ? 'block' : 'none';
+            if (e.target.checked) {
+                var logElement = document.getElementById('execution-log');
+                if (logElement) {
+                    logElement.scrollTop = logElement.scrollHeight;
+                }
+            }
+        }
+    });
+}
+
+// Poll Apify status
+function updateApifyStatus() {
+    fetch('/api/jobs/' + jobId + '/apify_status')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var loadingSpinner = document.getElementById('apify-loading');
+            var statusBadge = document.getElementById('apify-display-status');
+            var durationEl = document.getElementById('apify-duration');
+            var resultsSection = document.getElementById('apify-results');
+            
+            if (!data.has_apify_run) {
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                return;
+            }
+            
+            if (data.error) {
+                if (statusBadge) {
+                    statusBadge.textContent = 'Error';
+                    statusBadge.className = 'badge bg-danger';
+                }
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                return;
+            }
+            
+            // Update status badge
+            if (statusBadge) {
+                statusBadge.textContent = data.display_status;
+                var statusClass = 'secondary';
+                if (data.display_status === 'completed') statusClass = 'success';
+                else if (data.display_status === 'running') statusClass = 'warning';
+                else if (data.display_status === 'failed' || data.display_status === 'cancelled') statusClass = 'danger';
+                else if (data.display_status === 'queued') statusClass = 'info';
+                statusBadge.className = 'badge bg-' + statusClass;
+            }
+            
+            // Update duration
+            if (durationEl && data.duration_seconds) {
+                var mins = Math.floor(data.duration_seconds / 60);
+                var secs = Math.floor(data.duration_seconds % 60);
+                durationEl.textContent = mins + 'm ' + secs + 's';
+            }
+            
+            // Show/hide loading spinner
+            if (loadingSpinner) {
+                if (data.display_status === 'running' || data.display_status === 'queued') {
+                    loadingSpinner.style.display = 'inline-block';
+                } else {
+                    loadingSpinner.style.display = 'none';
+                    // Stop polling if completed
+                    if (apifyPollInterval) {
+                        clearInterval(apifyPollInterval);
+                        apifyPollInterval = null;
+                    }
+                }
+            }
+            
+            // Show results if available
+            if (data.results && data.display_status === 'completed') {
+                if (resultsSection) {
+                    resultsSection.style.display = 'block';
+                    var followedEl = document.getElementById('apify-followed');
+                    var failedEl = document.getElementById('apify-failed');
+                    var totalEl = document.getElementById('apify-total');
+                    if (followedEl) followedEl.textContent = data.results.followed || 0;
+                    if (failedEl) failedEl.textContent = data.results.failed || 0;
+                    if (totalEl) totalEl.textContent = data.results.total_items || 0;
+                }
+            }
+        })
+        .catch(function(error) {
+            console.error('Error fetching Apify status:', error);
+        });
+}
+
+// Start Apify polling if there's an Apify run
+var apifySection = document.getElementById('apify-status-section');
+if (apifySection) {
+    updateApifyStatus();
+    apifyPollInterval = setInterval(updateApifyStatus, 5000);
+}
+
+// Poll for progress updates if job is running
+var jobStatus = '{{ job.status }}';
+if (jobStatus === 'running') {
+    function updateProgress() {
+        fetch('/api/jobs/' + jobId + '/progress')
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                var progressBar = document.getElementById('progress-bar');
+                var progressPercent = document.getElementById('progress-percent');
+                var progressMessage = document.getElementById('progress-message');
+                var statusBadge = document.getElementById('status-badge');
+                
+                if (progressBar) {
+                    progressBar.style.width = data.progress_percent + '%';
+                }
+                if (progressPercent) {
+                    progressPercent.textContent = data.progress_percent + '%';
+                }
+                if (progressMessage) {
+                    progressMessage.textContent = data.progress_message || 'Processing...';
+                }
+                if (statusBadge) {
+                    statusBadge.textContent = data.status;
+                    statusBadge.className = 'badge bg-' + 
+                        (data.status === 'completed' ? 'success' : 
+                         data.status === 'failed' ? 'danger' : 
+                         data.status === 'running' ? 'warning' : 'secondary');
+                }
+                
+                var logElement = document.getElementById('execution-log');
+                var showLogs = document.getElementById('show-logs');
+                if (logElement && data.execution_log) {
+                    var wasAtBottom = logElement.scrollHeight - logElement.scrollTop <= logElement.clientHeight + 10;
+                    logElement.textContent = data.execution_log;
+                    if (wasAtBottom && showLogs && showLogs.checked) {
+                        logElement.scrollTop = logElement.scrollHeight;
+                    }
+                }
+                
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    setTimeout(function() { location.reload(); }, 1000);
+                }
+            })
+            .catch(function(error) {
+                console.error('Error fetching progress:', error);
+            });
+    }
+    
+    pollInterval = setInterval(updateProgress, 2000);
+    updateProgress();
+}
+
+// Cancel job function
+function cancelJob() {
+    if (!confirm('Are you sure you want to force kill this job? This action cannot be undone.')) {
+        return;
+    }
+    
+    var btn = document.getElementById('cancel-job-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Cancelling...';
+    }
+    
+    fetch('/api/jobs/' + jobId + '/cancel', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Force Kill Job';
+            }
+        } else {
+            location.reload();
+        }
+    })
+    .catch(function(error) {
+        console.error('Error cancelling job:', error);
+        alert('Error cancelling job. Please try again.');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Force Kill Job';
+        }
+    });
+}
+</script>
+{% endblock %}

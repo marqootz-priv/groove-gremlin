@@ -28,7 +28,7 @@ jobs:
           heroku_email: ${{secrets.HEROKU_EMAIL}}
           appdir: "webapp"
           usedocker: false
-          healthcheck: "https://groove-gremlin.herokuapp.com/"
+          healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
           check_healthcheck_retries: 10
           delay: 10
 

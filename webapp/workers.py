@@ -5,6 +5,7 @@ Uses RQ (Redis Queue) for simple job processing.
 
 from redis import Redis
 from redis import from_url as redis_from_url
+from rq import Queue
 from app import app, db, User, Job
 from spotipy import Spotify
 from spotipy.oauth2 import SpotifyOAuth

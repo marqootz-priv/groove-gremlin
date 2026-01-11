@@ -8,6 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import spotipy
+import requests
 from spotipy.oauth2 import SpotifyOAuth
 import os
 from datetime import datetime, timedelta
@@ -41,7 +42,7 @@ def from_json_filter(value):
         return {}
     try:
         return json.loads(value)
-    except:
+    except Exception:
         return {}
 
 # Spotify OAuth configuration
@@ -510,7 +511,7 @@ def job_status(job_id):
     if job.output_data:
         try:
             output_data = json.loads(job.output_data)
-        except:
+        except Exception:
             output_data = {'raw': job.output_data}
     
     return render_template('job_detail.html', job=job, output_data=output_data)
@@ -652,7 +653,9 @@ def job_download_apify(job_id):
 # Tables are created via migration command, not on app startup
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Only enable debug in development, not production
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode, port=5000)
 
 
 @app.route('/api/jobs/<int:job_id>/apify_status')
@@ -667,7 +670,7 @@ def apify_status(job_id):
     # Parse output_data to get apify_run_id
     try:
         output_data = json.loads(job.output_data) if job.output_data else {}
-    except:
+    except Exception:
         output_data = {}
     
     apify_run_id = output_data.get('apify_run_id')
@@ -736,7 +739,7 @@ def apify_status(job_id):
                                 followed_count += 1
                             elif item.get('status') in ['failed', 'error', 'user_not_found']:
                                 failed_count += 1
-                except:
+                except Exception:
                     pass
             
             return jsonify({

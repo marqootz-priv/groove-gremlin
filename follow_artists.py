@@ -6,7 +6,6 @@ Automatically follows all artists from your liked/saved tracks.
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from collections import defaultdict
 import time
 import os
 from dotenv import load_dotenv
@@ -216,7 +215,7 @@ def main():
     # Find artists not yet followed
     to_follow = set(all_artists.keys()) - followed
     
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Total unique artists found: {len(all_artists)}")
     print(f"   Already following: {len(followed)}")
     print(f"   New artists to follow: {len(to_follow)}")

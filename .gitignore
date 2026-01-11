@@ -1,38 +1,28 @@
-# Environment files with credentials
+# Environment variables and secrets - NEVER commit these!
 .env
-.env.*
-*.env
-
-# Spotify cache (contains auth tokens)
-.spotify_cache
-.spotify_cache.*
-
-# Generated output files
-instagram_accounts_*.json
-instagram_accounts_*.txt
-instagram_accounts_*.csv
-instagram_urls_*.txt
-instagram_urls_*_apify_input.json
-concerts_*.txt
+*.key
+*.pem
+*.p12
+secrets/
+credentials/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
+.venv/
 venv/
-env/
 ENV/
-.venv
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

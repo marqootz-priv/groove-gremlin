@@ -11,7 +11,6 @@ import time
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from collections import defaultdict
 import math
 
 # Load environment variables
@@ -257,7 +256,7 @@ def format_event(event, artist_name, user_lat=None, user_lon=None):
     try:
         dt = datetime.fromisoformat(event["datetime"].replace("Z", "+00:00"))
         date_str = dt.strftime("%a, %b %d, %Y @ %I:%M %p")
-    except:
+    except Exception:
         date_str = event.get("datetime", "TBA")
         dt = None
     
@@ -338,7 +337,7 @@ def main():
                 radius_miles = float(radius_input) if radius_input.replace(".", "").isdigit() else 50
                 print(f"   📍 Searching within {radius_miles} miles")
         else:
-            print(f"   ⚠️  Could not geocode location, using text matching instead")
+            print("   ⚠️  Could not geocode location, using text matching instead")
 
     # Get time range
     print("\nHow many months ahead to search? (default: 3): ", end="")
@@ -358,7 +357,7 @@ def main():
         return
 
     # Search for events
-    print(f"\n🔍 Searching for concerts (this may take a minute)...")
+    print("\n🔍 Searching for concerts (this may take a minute)...")
     all_events = []
     artists_with_events = set()
 
@@ -395,7 +394,7 @@ def main():
     print(" " * 60)  # Clear progress line
 
     if not all_events:
-        print(f"\n😔 No upcoming concerts found for your followed artists")
+        print("\n😔 No upcoming concerts found for your followed artists")
         if location_input:
             print(f"   in '{location_input}' within the next {months_ahead} months.")
             print("   Try a broader search (larger area or more months).")
@@ -417,7 +416,7 @@ def main():
                 current_month = month
                 print(f"\n📅 {current_month}")
                 print("-" * 40)
-        except:
+        except Exception:
             pass
 
         print(f"\n🎤 {event['artist']}")
@@ -440,7 +439,7 @@ def main():
         filename = f"concerts_{datetime.now().strftime('%Y%m%d')}.txt"
         filepath = os.path.join(script_dir, filename)
         with open(filepath, "w") as f:
-            f.write(f"Concerts for Followed Artists\n")
+            f.write("Concerts for Followed Artists\n")
             f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
             if location_input:
                 f.write(f"Location: {location_input}\n")

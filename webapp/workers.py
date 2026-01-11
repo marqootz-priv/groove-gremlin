@@ -3,7 +3,6 @@ Background worker tasks for processing jobs.
 Uses RQ (Redis Queue) for simple job processing.
 """
 
-from rq import Queue, Worker
 from redis import Redis
 from redis import from_url as redis_from_url
 from app import app, db, User, Job
@@ -240,7 +239,7 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
             if job.input_data:
                 try:
                     input_data = json.loads(job.input_data)
-                except:
+                except Exception:
                     pass
             
             limit = input_data.get('limit', limit)
@@ -566,7 +565,7 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 else:
                     # Skip Last.fm if no API key configured
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      f"Strategy 3: Skipping Last.fm (no LASTFM_API_KEY configured)")
+                                      "Strategy 3: Skipping Last.fm (no LASTFM_API_KEY configured)")
                 
                 # Strategy 4: Genius.com lookup (optional - requires GENIUS_CLIENT_TOKEN env var)
                 genius_token = os.getenv('GENIUS_CLIENT_TOKEN')
@@ -621,11 +620,11 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 else:
                     # Skip Genius if no token configured
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      f"Strategy 4: Skipping Genius (no GENIUS_CLIENT_TOKEN configured)")
+                                      "Strategy 4: Skipping Genius (no GENIUS_CLIENT_TOKEN configured)")
                 
                 # Strategy 5: Try Instagram API with normalized usernames
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  f"Strategy 5: Trying Instagram API with username variations...")
+                                  "Strategy 5: Trying Instagram API with username variations...")
                 
                 for url in instagram_urls[:5]:  # Limit to first 5 to avoid too many API calls
                     username = url.split('/')[-2]  # Extract username from URL
@@ -696,7 +695,7 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                                                     return instagram_url
                         else:
                             update_job_progress(job, job.progress_percent, job.progress_message,
-                                              f"DuckDuckGo returned 0 results")
+                                              "DuckDuckGo returned 0 results")
                 except Exception as ddg_error:
                     update_job_progress(job, job.progress_percent, job.progress_message,
                                       f"DuckDuckGo search failed: {str(ddg_error)}")
@@ -736,13 +735,13 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     
                     if result_count == 0:
                         update_job_progress(job, job.progress_percent, job.progress_message,
-                                          f"Google search returned 0 results")
+                                          "Google search returned 0 results")
                 except Exception as google_error:
                     error_str = str(google_error)
                     # Check if it's a rate limit error
                     if '429' in error_str or 'Too Many Requests' in error_str:
                         update_job_progress(job, job.progress_percent, job.progress_message,
-                                          f"Google search rate limited (429) - skipping to avoid further blocks")
+                                          "Google search rate limited (429) - skipping to avoid further blocks")
                     else:
                         update_job_progress(job, job.progress_percent, job.progress_message,
                                           f"Google search error: {error_str[:100]}")
@@ -1052,7 +1051,6 @@ def find_concerts_task(user_id, job_id, location=None, radius_miles=None, months
                 if results["artists"]["next"]:
                     after = items[-1]["id"]
                 else:
-                    total_artists = len(artists)
                     break
             
             update_job_progress(job, 30, f"Found {len(artists)} followed artists", f"Found {len(artists)} artists to search")

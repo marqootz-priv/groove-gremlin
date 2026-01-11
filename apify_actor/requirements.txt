@@ -2,8 +2,8 @@
 apify>=1.0.0
 
 # Instagram API library (uses mobile API, not browser)
-# Using 2.0.24 which is known to be stable
-instagrapi==2.0.24
+# Using latest version to get bug fixes
+instagrapi>=2.0.27
 
 # Required dependencies
 requests>=2.31.0

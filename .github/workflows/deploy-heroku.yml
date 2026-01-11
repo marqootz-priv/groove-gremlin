@@ -34,5 +34,4 @@ jobs:
           appdir: "webapp"
           usedocker: false
           healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
-          check_healthcheck_retries: 10
           delay: 10

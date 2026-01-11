@@ -105,7 +105,21 @@ jobs:
           [ -f "Procfile" ] && echo "✅ Procfile exists" || echo "❌ Procfile missing"
           [ -f "requirements.txt" ] && echo "✅ requirements.txt exists" || echo "❌ requirements.txt missing"
           [ -f "app.py" ] && echo "✅ app.py exists" || echo "❌ app.py missing"
+          echo ""
+          echo "📝 Current commit being deployed:"
+          git log -1 --oneline || echo "  (not a git repo in webapp/)"
           cd ..
+
+      - name: Check current Heroku release before deployment
+        run: |
+          echo "📋 Current Heroku release (before deployment):"
+          heroku releases --app groove-gremlin --num 1
+          echo ""
+          echo "📝 Current GitHub commit being deployed:"
+          echo "  Full SHA: ${{ github.sha }}"
+          echo "  Short: $(echo ${{ github.sha }} | cut -c1-7)"
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 
       - name: Deploy to Heroku
         id: deploy
@@ -118,20 +132,37 @@ jobs:
           usedocker: false
           healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
           delay: 10
+          rollbackonhealthcheckfailed: false
 
       - name: Verify Heroku deployment
         run: |
           echo "🔍 Verifying Heroku deployment..."
           echo ""
-          echo "📋 Recent releases (latest deployments):"
+          echo "📋 Recent releases (checking if new release was created):"
           heroku releases --app groove-gremlin --num 5
           echo ""
           echo "📝 Latest release details:"
           heroku releases:info --app groove-gremlin || echo "⚠️  Could not get release details"
           echo ""
+          echo "🔍 Commit comparison:"
+          GITHUB_COMMIT="${{ github.sha }}"
+          GITHUB_SHORT=$(echo "$GITHUB_COMMIT" | cut -c1-7)
+          echo "  GitHub commit (deployed): $GITHUB_SHORT"
+          echo ""
+          echo "  Checking if this commit appears in recent releases..."
+          LATEST_RELEASES=$(heroku releases --app groove-gremlin --num 5)
+          if echo "$LATEST_RELEASES" | grep -q "$GITHUB_SHORT"; then
+            echo "  ✅ Commit found in releases - deployment succeeded!"
+          else
+            echo "  ⚠️  Commit NOT found in recent releases"
+            echo "     This usually means:"
+            echo "     1. The code is identical to what's already deployed (Heroku skips duplicate releases)"
+            echo "     2. The deployment didn't actually push new code"
+            echo ""
+            echo "  💡 To force a new deployment, make a small change to a file in webapp/"
+          fi
+          echo ""
           echo "✅ Deployment verification complete!"
-          echo "💡 Note: Each 'Deploy' release indicates a successful deployment."
-          echo "   Check https://dashboard.heroku.com/apps/groove-gremlin/activity for full activity feed."
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 

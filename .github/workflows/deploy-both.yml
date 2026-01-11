@@ -123,14 +123,15 @@ jobs:
         run: |
           echo "🔍 Verifying Heroku deployment..."
           echo ""
-          echo "📋 Recent releases (checking for new deployment):"
-          heroku releases --app groove-gremlin --num 5 || echo "⚠️  Could not get releases"
+          echo "📋 Recent releases (latest deployments):"
+          heroku releases --app groove-gremlin --num 5
           echo ""
-          echo "📝 Recent builds (should show new build if triggered):"
-          heroku builds --app groove-gremlin --num 3 || echo "⚠️  Could not get builds"
+          echo "📝 Latest release details:"
+          heroku releases:info --app groove-gremlin || echo "⚠️  Could not get release details"
           echo ""
-          echo "📊 App activity (latest events):"
-          heroku activity --app groove-gremlin --num 5 || echo "⚠️  Could not get activity"
+          echo "✅ Deployment verification complete!"
+          echo "💡 Note: Each 'Deploy' release indicates a successful deployment."
+          echo "   Check https://dashboard.heroku.com/apps/groove-gremlin/activity for full activity feed."
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 

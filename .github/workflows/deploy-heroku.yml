@@ -40,10 +40,10 @@ jobs:
       - name: Verify deployment
         run: |
           echo "🔍 Checking Heroku deployment status..."
-          echo "📋 Recent releases:"
-          heroku releases --app groove-gremlin --num 3 || true
+          echo "📋 Recent releases (latest deployments):"
+          heroku releases --app groove-gremlin --num 3
           echo ""
-          echo "📝 Recent builds:"
-          heroku builds --app groove-gremlin --num 3 || true
+          echo "✅ Deployment verification complete!"
+          echo "💡 Each 'Deploy' release indicates a successful deployment."
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}

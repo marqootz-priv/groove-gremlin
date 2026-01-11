@@ -29,12 +29,49 @@ jobs:
             apify:
               - 'apify_actor/**'
 
+      - name: Debug - Show detected changes
+        run: |
+          echo "🔍 Change Detection Results:"
+          echo "  webapp changed: ${{ steps.filter.outputs.webapp }}"
+          echo "  apify changed: ${{ steps.filter.outputs.apify }}"
+          echo "  Event type: ${{ github.event_name }}"
+          echo "  Commit SHA: ${{ github.sha }}"
+          echo "  Modified files:"
+          git diff --name-only HEAD~1 HEAD || echo "  (Could not determine changed files)"
+
   deploy-heroku:
     name: Deploy Web App to Heroku
     needs: changes
     runs-on: ubuntu-latest
     if: needs.changes.outputs.webapp == 'true' || github.event_name == 'workflow_dispatch'
     steps:
+      - name: Debug - Check job condition
+        run: |
+          echo "🔍 Deployment Condition Check:"
+          echo "  webapp changed: ${{ needs.changes.outputs.webapp }}"
+          echo "  event type: ${{ github.event_name }}"
+          echo "  condition result: ${{ needs.changes.outputs.webapp == 'true' || github.event_name == 'workflow_dispatch' }}"
+
+      - name: Verify Secrets
+        run: |
+          echo "🔐 Verifying secrets are set..."
+          if [ -z "$HEROKU_API_KEY" ]; then
+            echo "❌ ERROR: HEROKU_API_KEY secret is not set or empty"
+            exit 1
+          else
+            KEY_LEN=${#HEROKU_API_KEY}
+            echo "✅ HEROKU_API_KEY is set (length: $KEY_LEN chars)"
+          fi
+          if [ -z "$HEROKU_EMAIL" ]; then
+            echo "❌ ERROR: HEROKU_EMAIL secret is not set or empty"
+            exit 1
+          else
+            echo "✅ HEROKU_EMAIL is set: $HEROKU_EMAIL"
+          fi
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_EMAIL: ${{ secrets.HEROKU_EMAIL }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -64,6 +101,32 @@ jobs:
     runs-on: ubuntu-latest
     if: needs.changes.outputs.apify == 'true' || github.event_name == 'workflow_dispatch'
     steps:
+      - name: Debug - Check job condition
+        run: |
+          echo "🔍 Deployment Condition Check:"
+          echo "  apify changed: ${{ needs.changes.outputs.apify }}"
+          echo "  event type: ${{ github.event_name }}"
+          echo "  condition result: ${{ needs.changes.outputs.apify == 'true' || github.event_name == 'workflow_dispatch' }}"
+
+      - name: Verify Secrets
+        run: |
+          echo "🔐 Verifying secrets are set..."
+          if [ -z "$APIFY_API_TOKEN" ]; then
+            echo "❌ ERROR: APIFY_API_TOKEN secret is not set or empty"
+            exit 1
+          else
+            TOKEN_LEN=${#APIFY_API_TOKEN}
+            echo "✅ APIFY_API_TOKEN is set (length: $TOKEN_LEN chars)"
+            # Check if token starts with expected prefix
+            if [[ "$APIFY_API_TOKEN" == apify_api_* ]]; then
+              echo "✅ Token format looks correct (starts with 'apify_api_')"
+            else
+              echo "⚠️  WARNING: Token doesn't start with 'apify_api_' - may be incorrect"
+            fi
+          fi
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -77,9 +140,31 @@ jobs:
 
       - name: Login to Apify
         run: |
+          echo "🔐 Logging into Apify..."
           echo "${{ secrets.APIFY_API_TOKEN }}" | apify login --token
+          echo "✅ Login successful"
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+
+      - name: Verify Apify Actor Structure
+        run: |
+          cd apify_actor
+          echo "📁 Checking actor structure..."
+          if [ ! -f "actor.json" ]; then
+            echo "❌ ERROR: actor.json not found in apify_actor directory"
+            exit 1
+          fi
+          if [ ! -f "main.py" ]; then
+            echo "❌ ERROR: main.py not found in apify_actor directory"
+            exit 1
+          fi
+          if [ ! -f "Dockerfile" ]; then
+            echo "❌ ERROR: Dockerfile not found in apify_actor directory"
+            exit 1
+          fi
+          echo "✅ All required files found"
+          echo "📋 Actor name from actor.json:"
+          cat actor.json | grep -o '"name": "[^"]*"' || echo "  (could not parse)"
 
       - name: Deploy Apify Actor
         run: |

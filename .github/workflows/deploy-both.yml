@@ -26,8 +26,12 @@ jobs:
           filters: |
             webapp:
               - 'webapp/**'
+              - '.github/workflows/deploy-both.yml'
+              - '.github/workflows/deploy-heroku.yml'
             apify:
               - 'apify_actor/**'
+              - '.github/workflows/deploy-both.yml'
+              - '.github/workflows/deploy-apify.yml'
 
       - name: Debug - Show detected changes
         run: |
@@ -38,6 +42,12 @@ jobs:
           echo "  Commit SHA: ${{ github.sha }}"
           echo "  Modified files:"
           git diff --name-only HEAD~1 HEAD || echo "  (Could not determine changed files)"
+          echo ""
+          echo "ℹ️  Note: Deployments trigger on:"
+          echo "  - Changes to webapp/ directory"
+          echo "  - Changes to apify_actor/ directory"
+          echo "  - Changes to workflow files (deploy-both.yml, deploy-heroku.yml, deploy-apify.yml)"
+          echo "  - Manual workflow dispatch"
 
   deploy-heroku:
     name: Deploy Web App to Heroku

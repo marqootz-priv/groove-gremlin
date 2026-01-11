@@ -361,20 +361,55 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 
                 return urls
             
-            def verify_instagram_url(instagram_url):
+            def get_instagram_profile_via_api(username):
                 """
-                Check if an Instagram profile URL actually exists using HEAD request.
-                Returns (True, username) if the profile exists, (False, None) otherwise.
+                Fetch Instagram profile using Instagram's internal API.
+                Returns profile URL if found, None otherwise.
                 """
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
+                    'x-ig-app-id': '936619743392459',  # Public Instagram web app ID
+                    'Accept': 'application/json',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Origin': 'https://www.instagram.com',
+                    'Referer': 'https://www.instagram.com/',
                 }
                 
+                try:
+                    # Instagram's internal API endpoint
+                    url = f'https://www.instagram.com/api/v1/users/web_profile_info/'
+                    params = {'username': username}
+                    
+                    response = requests.get(url, params=params, headers=headers, timeout=10)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        if data.get('data', {}).get('user'):
+                            verified_username = data['data']['user'].get('username')
+                            if verified_username:
+                                return f'https://www.instagram.com/{verified_username}/'
+                    elif response.status_code == 404:
+                        # User doesn't exist
+                        return None
+                    # Other status codes (403, 429, etc.) might indicate blocking/rate limiting
+                except requests.exceptions.Timeout:
+                    # Timeout - API might be slow or blocked
+                    pass
+                except requests.exceptions.RequestException:
+                    # Network error or other request issue
+                    pass
+                except Exception as e:
+                    # Other errors (JSON parsing, etc.)
+                    pass
+                
+                return None
+            
+            def verify_instagram_url(instagram_url):
+                """
+                Check if an Instagram profile URL actually exists.
+                Uses Instagram API first (more reliable), falls back to HTTP if needed.
+                Returns (True, username) if the profile exists, (False, None) otherwise.
+                """
                 try:
                     # Extract username from URL
                     match = re.search(r'instagram\.com/([a-zA-Z0-9._]{1,30})/?', instagram_url)
@@ -387,32 +422,26 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     if username in invalid_paths:
                         return False, None
                     
-                    # Use HEAD request to check if profile exists (lightweight)
-                    try:
-                        response = requests.head(instagram_url, headers=headers, timeout=10, allow_redirects=True)
-                        
-                        # Instagram returns 200 for existing profiles, 404 for non-existent
-                        # Some redirects are normal (e.g., www.instagram.com -> instagram.com)
-                        if response.status_code == 200:
-                            # Double-check: make sure it's not a generic Instagram page
-                            final_url = response.url
-                            if 'instagram.com/' + username in final_url or 'instagram.com/' + username + '/' in final_url:
-                                return True, username
-                    except requests.exceptions.RequestException:
-                        # HEAD request failed, try GET as fallback
-                        pass
+                    # Primary method: Use Instagram API (more reliable than HTTP requests)
+                    api_result = get_instagram_profile_via_api(username)
+                    if api_result:
+                        # API confirmed the profile exists
+                        return True, username
                     
-                    # If HEAD fails or returns non-200, try GET but only check status code
+                    # Fallback: Try HTTP request (Instagram may block this, but worth trying)
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.5',
+                    }
+                    
                     try:
                         response = requests.get(instagram_url, headers=headers, timeout=10, allow_redirects=True)
+                        # If we get 200 and the final URL contains the username, assume it's valid
                         if response.status_code == 200:
-                            # Check if the final URL contains the username (profile exists)
                             final_url = response.url
-                            match = re.search(r'instagram\.com/([a-zA-Z0-9._]{1,30})/?', final_url)
-                            if match and match.group(1) == username:
-                                return True, username
-                            # Also check if response contains profile indicators
-                            if username in final_url and 'login' not in final_url.lower():
+                            # Check if final URL contains the username (not redirected to login)
+                            if username in final_url and '/login' not in final_url:
                                 return True, username
                     except requests.exceptions.RequestException:
                         pass
@@ -421,36 +450,6 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 except Exception as e:
                     # Log error for debugging but don't fail completely
                     return False, None
-            
-            def get_instagram_profile_via_api(username):
-                """
-                Fetch Instagram profile using Instagram's internal API.
-                Returns profile URL if found, None otherwise.
-                """
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'x-ig-app-id': '936619743392459',  # Public Instagram web app ID
-                    'Accept': 'application/json',
-                }
-                
-                try:
-                    # Instagram's internal API endpoint
-                    url = f'https://i.instagram.com/api/v1/users/web_profile_info/'
-                    params = {'username': username}
-                    
-                    response = requests.get(url, params=params, headers=headers, timeout=5)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get('data', {}).get('user'):
-                            verified_username = data['data']['user'].get('username')
-                            if verified_username:
-                                return f'https://www.instagram.com/{verified_username}/'
-                except Exception as e:
-                    # API may be rate-limited or blocked, that's okay
-                    pass
-                
-                return None
             
             def search_for_instagram(artist_name):
                 """
@@ -476,8 +475,8 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                         update_job_progress(job, job.progress_percent, job.progress_message,
                                           f"✓ Found via {strategy_used}: {url}\nUsername: {username}")
                         return url
-                    # Small delay between checks to avoid rate limiting
-                    time.sleep(0.3)
+                    # Delay between checks to avoid rate limiting (increased for API calls)
+                    time.sleep(0.5)
                 
                 if verified_count > 0:
                     update_job_progress(job, job.progress_percent, job.progress_message,

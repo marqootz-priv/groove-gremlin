@@ -514,16 +514,21 @@
             }
         });
 
-        // Function to show settings modal (defined in dashboard.html)
+        // Function to show settings modal
         function showSettingsModal() {
-            if (typeof window.showSettingsModal === 'function') {
-                window.showSettingsModal();
+            const modal = document.getElementById('settingsModal');
+            if (modal) {
+                // We're on dashboard, show the modal
+                modal.classList.add('show');
             } else {
-                // If not on dashboard, redirect to dashboard with settings
-                window.location.href = "{{ url_for('dashboard') }}";
+                // Not on dashboard, redirect to dashboard with settings parameter
+                window.location.href = "{{ url_for('dashboard') }}?settings=open";
             }
             // Close menu
-            document.getElementById('menuDropdown').classList.remove('active');
+            const dropdown = document.getElementById('menuDropdown');
+            if (dropdown) {
+                dropdown.classList.remove('active');
+            }
         }
     </script>
 </body>

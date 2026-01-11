@@ -277,6 +277,15 @@ if (modal) {
             closeSettingsModal();
         }
     });
+    
+    // Check URL parameter to auto-open settings modal
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('settings') === 'open') {
+        showSettingsModal();
+        // Clean up URL by removing the parameter
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, newUrl);
+    }
 }
 </script>
 {% endblock %}

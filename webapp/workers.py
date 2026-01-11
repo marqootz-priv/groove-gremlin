@@ -406,10 +406,18 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
             
             def verify_instagram_url(instagram_url):
                 """
-                Check if an Instagram profile URL actually exists.
-                Uses Instagram API first (more reliable), falls back to HTTP if needed.
+                Check if an Instagram profile URL actually exists using HTTP requests.
                 Returns (True, username) if the profile exists, (False, None) otherwise.
                 """
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+                
                 try:
                     # Extract username from URL
                     match = re.search(r'instagram\.com/([a-zA-Z0-9._]{1,30})/?', instagram_url)
@@ -422,33 +430,31 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     if username in invalid_paths:
                         return False, None
                     
-                    # Primary method: Use Instagram API (more reliable than HTTP requests)
-                    api_result = get_instagram_profile_via_api(username)
-                    if api_result:
-                        # API confirmed the profile exists
-                        return True, username
-                    
-                    # Fallback: Try HTTP request (Instagram may block this, but worth trying)
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.5',
-                    }
-                    
+                    # Use HEAD request first (lightweight)
                     try:
-                        response = requests.get(instagram_url, headers=headers, timeout=10, allow_redirects=True)
-                        # If we get 200 and the final URL contains the username, assume it's valid
+                        response = requests.head(instagram_url, headers=headers, timeout=10, allow_redirects=True)
                         if response.status_code == 200:
                             final_url = response.url
-                            # Check if final URL contains the username (not redirected to login)
-                            if username in final_url and '/login' not in final_url:
+                            if 'instagram.com/' + username in final_url or 'instagram.com/' + username + '/' in final_url:
+                                return True, username
+                    except requests.exceptions.RequestException:
+                        pass
+                    
+                    # Fallback to GET if HEAD fails
+                    try:
+                        response = requests.get(instagram_url, headers=headers, timeout=10, allow_redirects=True)
+                        if response.status_code == 200:
+                            final_url = response.url
+                            match = re.search(r'instagram\.com/([a-zA-Z0-9._]{1,30})/?', final_url)
+                            if match and match.group(1) == username:
+                                return True, username
+                            if username in final_url and 'login' not in final_url.lower():
                                 return True, username
                     except requests.exceptions.RequestException:
                         pass
                     
                     return False, None
                 except Exception as e:
-                    # Log error for debugging but don't fail completely
                     return False, None
             
             def search_for_instagram(artist_name):

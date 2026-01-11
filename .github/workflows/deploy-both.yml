@@ -84,6 +84,8 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for Heroku deployment
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -121,18 +123,39 @@ jobs:
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 
+      - name: Debug - Check what files changed in webapp
+        run: |
+          echo "📝 Files that changed in webapp/:"
+          git diff --name-only HEAD~1 HEAD | grep "^webapp/" || echo "  (No files in webapp/ changed, or can't determine)"
+          echo ""
+          echo "📝 Current commit in webapp directory:"
+          cd webapp
+          git log -1 --oneline || echo "  (Not a git repo)"
+          cd ..
+
       - name: Deploy to Heroku
         id: deploy
-        uses: akhileshns/heroku-deploy@v3.13.15
+        uses: akhileshns/heroku-deploy@v3.14.15
         with:
           heroku_api_key: ${{secrets.HEROKU_API_KEY}}
           heroku_app_name: "groove-gremlin"
           heroku_email: ${{secrets.HEROKU_EMAIL}}
           appdir: "webapp"
+          branch: "main"
           usedocker: false
           healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
           delay: 10
           rollbackonhealthcheckfailed: false
+          justlogin: false
+
+      - name: Debug - Check action output
+        if: always()
+        run: |
+          echo "🔍 Deploy action status:"
+          echo "  Outcome: ${{ steps.deploy.outcome }}"
+          echo ""
+          echo "📝 If deployment failed silently, check the 'Deploy to Heroku' step logs above"
+          echo "   Look for git push errors or authentication issues"
 
       - name: Verify Heroku deployment
         run: |

@@ -385,7 +385,17 @@
                     {% if current_user.is_authenticated %}
                         <a href="{{ url_for('dashboard') }}">Dashboard</a>
                         <a href="{{ url_for('features', tab='follow_artists') }}">Features</a>
-                        <a href="{{ url_for('logout') }}">Logout ({{ current_user.username }})</a>
+                        <div class="hamburger-menu">
+                            <button class="hamburger-button" onclick="toggleMenu()" aria-label="Menu">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </button>
+                            <div class="menu-dropdown" id="menuDropdown">
+                                <a href="#" onclick="showSettingsModal(); return false;">⚙️ Settings</a>
+                                <a href="{{ url_for('logout') }}" class="logout-link">🚪 Logout ({{ current_user.username }})</a>
+                            </div>
+                        </div>
                     {% else %}
                         <a href="{{ url_for('login') }}">Login</a>
                         <a href="{{ url_for('register') }}">Register</a>
@@ -416,6 +426,33 @@
     </div>
 
     {% block scripts %}{% endblock %}
+    <script>
+        function toggleMenu() {
+            const dropdown = document.getElementById('menuDropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(event) {
+            const hamburger = document.querySelector('.hamburger-menu');
+            const dropdown = document.getElementById('menuDropdown');
+            if (hamburger && !hamburger.contains(event.target) && dropdown.classList.contains('active')) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        // Function to show settings modal (defined in dashboard.html)
+        function showSettingsModal() {
+            if (typeof window.showSettingsModal === 'function') {
+                window.showSettingsModal();
+            } else {
+                // If not on dashboard, redirect to dashboard with settings
+                window.location.href = "{{ url_for('dashboard') }}";
+            }
+            // Close menu
+            document.getElementById('menuDropdown').classList.remove('active');
+        }
+    </script>
 </body>
 </html>
 # Force deployment

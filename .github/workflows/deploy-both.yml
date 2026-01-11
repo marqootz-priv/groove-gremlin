@@ -94,7 +94,21 @@ jobs:
         run: |
           curl https://cli-assets.heroku.com/install.sh | sh
 
+      - name: Verify webapp directory structure
+        run: |
+          echo "📁 Checking webapp directory..."
+          cd webapp
+          echo "Files in webapp/:"
+          ls -la
+          echo ""
+          echo "Checking for required files:"
+          [ -f "Procfile" ] && echo "✅ Procfile exists" || echo "❌ Procfile missing"
+          [ -f "requirements.txt" ] && echo "✅ requirements.txt exists" || echo "❌ requirements.txt missing"
+          [ -f "app.py" ] && echo "✅ app.py exists" || echo "❌ app.py missing"
+          cd ..
+
       - name: Deploy to Heroku
+        id: deploy
         uses: akhileshns/heroku-deploy@v3.13.15
         with:
           heroku_api_key: ${{secrets.HEROKU_API_KEY}}
@@ -104,6 +118,21 @@ jobs:
           usedocker: false
           healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
           delay: 10
+
+      - name: Verify Heroku deployment
+        run: |
+          echo "🔍 Verifying Heroku deployment..."
+          echo ""
+          echo "📋 Recent releases (checking for new deployment):"
+          heroku releases --app groove-gremlin --num 5 || echo "⚠️  Could not get releases"
+          echo ""
+          echo "📝 Recent builds (should show new build if triggered):"
+          heroku builds --app groove-gremlin --num 3 || echo "⚠️  Could not get builds"
+          echo ""
+          echo "📊 App activity (latest events):"
+          heroku activity --app groove-gremlin --num 5 || echo "⚠️  Could not get activity"
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
 
   deploy-apify:
     name: Deploy Actor to Apify

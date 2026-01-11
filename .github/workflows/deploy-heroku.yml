@@ -26,6 +26,7 @@ jobs:
           curl https://cli-assets.heroku.com/install.sh | sh
 
       - name: Deploy to Heroku
+        id: deploy
         uses: akhileshns/heroku-deploy@v3.13.15
         with:
           heroku_api_key: ${{secrets.HEROKU_API_KEY}}
@@ -35,3 +36,14 @@ jobs:
           usedocker: false
           healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
           delay: 10
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Checking Heroku deployment status..."
+          echo "📋 Recent releases:"
+          heroku releases --app groove-gremlin --num 3 || true
+          echo ""
+          echo "📝 Recent builds:"
+          heroku builds --app groove-gremlin --num 3 || true
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}

@@ -17,6 +17,9 @@ import json
 import csv
 from dotenv import load_dotenv
 from urllib.parse import quote
+import re
+
+from apify_client import ApifyClient
 
 # Load environment variables
 load_dotenv()
@@ -25,8 +28,14 @@ load_dotenv()
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
+APIFY_TOKEN = os.getenv("APIFY_API_TOKEN") or os.getenv("APIFY_TOKEN")
 
 SCOPES = ["user-follow-read"]
+
+# Optional known handles to avoid search flakiness (fill in as needed)
+KNOWN_HANDLES = {
+    # "Artist Name": "handle",
+}
 
 
 def create_spotify_client():
@@ -81,6 +90,16 @@ def search_instagram_handle(artist_name):
     Search for an Instagram account using web search.
     Returns Instagram handle/username if found, None otherwise.
     """
+    # Known handles shortcut
+    if artist_name in KNOWN_HANDLES:
+        return KNOWN_HANDLES[artist_name]
+
+    # Prefer Apify Google Search actor if token available
+    if APIFY_TOKEN:
+        handle = search_instagram_handle_apify_google(artist_name)
+        if handle:
+            return handle
+
     # Try multiple search strategies
     search_queries = [
         f"{artist_name} instagram",
@@ -118,6 +137,46 @@ def search_instagram_handle(artist_name):
         except Exception:
             continue
     
+    return None
+
+
+def search_instagram_handle_apify_google(artist_name):
+    """
+    Use Apify Google Search Results Scraper to find Instagram handles.
+    Returns handle if found, otherwise None.
+    """
+    try:
+        client = ApifyClient(APIFY_TOKEN)
+        run = client.actor("apify/google-search-scraper").call(
+            run_input={
+                "queries": [f"{artist_name} instagram"],
+                "maxPagesPerQuery": 1,
+                "resultsPerPage": 10,
+                "country": "us",
+                "language": "en",
+                "useBuiltInProxy": True,
+            }
+        )
+        items = client.dataset(run["defaultDatasetId"]).list_items().items
+
+        instagram_urls = []
+        for item in items:
+            for result in item.get("organicResults", []):
+                url = result.get("url", "")
+                if "instagram.com" in url:
+                    clean = url.split("?")[0].split("#")[0].rstrip("/")
+                    instagram_urls.append(clean)
+
+        # Extract the first plausible profile handle
+        for url in instagram_urls:
+            m = re.search(r"instagram\\.com/([^/?#]+)/?$", url)
+            if m:
+                handle = m.group(1)
+                # Skip non-profile paths
+                if handle.lower() not in {"explore", "accounts", "p"}:
+                    return handle
+    except Exception:
+        return None
     return None
 
 

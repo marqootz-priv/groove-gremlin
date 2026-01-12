@@ -105,16 +105,54 @@ async def main():
                     
                     if logged_in:
                         Actor.log.info('✅ Successfully logged in via Session ID')
+                        
+                        # Verify session is actually valid by trying a simple operation
+                        try:
+                            test_user_id = cl.user_id
+                            Actor.log.info(f'✅ Session validated - logged in as user ID: {test_user_id}')
+                        except LoginRequired:
+                            Actor.log.warning('⚠️  Session ID from browser may not be compatible with mobile API')
+                            Actor.log.warning('   Instagram invalidated the session - falling back to username/password')
+                            logged_in = False
+                        except Exception as e:
+                            Actor.log.warning(f'⚠️  Session validation failed: {str(e)}')
+                            logged_in = False
                     else:
-                        Actor.log.error('❌ Session ID login returned False - session may be expired')
-                        Actor.log.error('   Please get a fresh session ID from your browser')
+                        Actor.log.warning('⚠️  Session ID login returned False - session may be expired')
+                        logged_in = False
+                        
+                except LoginRequired:
+                    Actor.log.warning('⚠️  Session ID from browser not compatible with mobile API')
+                    Actor.log.warning('   Instagram requires mobile session ID - falling back to username/password')
+                    logged_in = False
+                except Exception as e:
+                    Actor.log.warning(f'⚠️  Session ID login failed: {str(e)}')
+                    Actor.log.warning('   Falling back to username/password login')
+                    logged_in = False
+                
+                # If session ID login failed, try username/password as fallback
+                if not logged_in and instagram_username and instagram_password:
+                    Actor.log.info('Attempting username/password login as fallback...')
+                    try:
+                        logged_in = cl.login(instagram_username, instagram_password)
+                        if logged_in:
+                            Actor.log.info('✅ Successfully logged in via username/password')
+                            # Save the new session ID for future use
+                            new_session_id = cl.sessionid
+                            Actor.log.info(f'💡 New session ID generated: {new_session_id[:20]}...')
+                            Actor.log.info('   Save this session ID for future runs to avoid login issues')
+                        else:
+                            Actor.log.error('❌ Username/password login also failed')
+                            await Actor.exit()
+                            return
+                    except Exception as e:
+                        Actor.log.error(f'❌ Username/password login failed: {str(e)}')
                         await Actor.exit()
                         return
-                        
-                except Exception as e:
-                    Actor.log.error(f'❌ Session ID login failed: {str(e)}')
-                    Actor.log.error('   The session ID may be expired or invalid.')
-                    Actor.log.error('   Please get a fresh session ID from your browser.')
+                elif not logged_in:
+                    Actor.log.error('❌ Session ID login failed and no username/password provided')
+                    Actor.log.error('   Note: Browser session IDs are not compatible with instagrapi')
+                    Actor.log.error('   Solution: Use username/password login, or generate session ID via instagrapi')
                     await Actor.exit()
                     return
             else:
@@ -155,16 +193,28 @@ async def main():
             
             time.sleep(3)
             
+            # Verify session is still valid before proceeding
+            try:
+                my_user_id = cl.user_id
+                Actor.log.info(f'✅ Session verified - logged in as user ID: {my_user_id}')
+            except LoginRequired:
+                Actor.log.error('❌ Session expired immediately after login')
+                Actor.log.error('   This usually means the session ID from browser is incompatible')
+                Actor.log.error('   Use username/password login instead, or generate session ID via instagrapi')
+                await Actor.exit()
+                return
+            
             # Get current following list
             Actor.log.info('Fetching your current following list...')
             following_usernames = set()
             try:
-                my_user_id = cl.user_id
-                Actor.log.info(f'Logged in as user ID: {my_user_id}')
-                
                 following = cl.user_following(my_user_id, amount=500)
                 following_usernames = {user.username.lower() for user in following.values()}
                 Actor.log.info(f'You currently follow {len(following_usernames)} accounts')
+            except LoginRequired:
+                Actor.log.warning('⚠️  Session expired while fetching following list')
+                Actor.log.warning('   This may indicate the session ID is incompatible')
+                Actor.log.warning('   Continuing anyway, but some operations may fail')
             except Exception as e:
                 Actor.log.warning(f'Could not fetch following list: {str(e)}')
             
@@ -228,6 +278,16 @@ async def main():
                         continue
                     
                     time.sleep(random.uniform(1, 2))
+                    
+                    # Verify session before each follow attempt
+                    try:
+                        # Quick session check
+                        _ = cl.user_id
+                    except LoginRequired:
+                        Actor.log.error('❌ Session expired before following @{username}')
+                        Actor.log.error('   The session ID from browser is not compatible with mobile API')
+                        Actor.log.error('   Please use username/password login instead')
+                        break
                     
                     try:
                         result = cl.user_follow(user_id)

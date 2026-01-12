@@ -237,9 +237,65 @@ async def main():
                         })
                         continue
                     
+                    # Helper function to get user ID with multiple fallback methods
+                    def get_user_id_safe(username):
+                        """Try multiple methods to get user ID, handling various errors"""
+                        # Method 1: Try user_id_from_username (fastest)
+                        try:
+                            return cl.user_id_from_username(username)
+                        except (TypeError, AttributeError) as e:
+                            if 'update_headers' in str(e) or 'extract_user_gql' in str(e):
+                                Actor.log.warning(f'  ⚠️  Instagrapi version issue, trying alternative method')
+                            else:
+                                raise
+                        except (UserNotFound, LoginRequired):
+                            raise
+                        except Exception:
+                            pass  # Try next method
+                        
+                        # Method 2: Try user_info_by_username (alternative)
+                        try:
+                            user_info = cl.user_info_by_username(username)
+                            return user_info.pk
+                        except (TypeError, AttributeError) as e:
+                            if 'update_headers' in str(e) or 'extract_user_gql' in str(e):
+                                Actor.log.warning(f'  ⚠️  Alternative method also has version issue')
+                            else:
+                                raise
+                        except (UserNotFound, LoginRequired):
+                            raise
+                        except Exception:
+                            pass  # Try next method
+                        
+                        # Method 3: Try direct API call via username search
+                        try:
+                            # Last resort: try to get from profile URL
+                            Actor.log.warning(f'  ⚠️  Standard methods failed, trying direct lookup')
+                            # This is a fallback - may not work
+                            raise UserNotFound(f"Could not find user @{username} with any method")
+                        except Exception as e:
+                            raise Exception(f"All methods failed to get user ID: {str(e)}")
+                    
                     try:
-                        # Try to get user ID - may fail due to instagrapi version issues
-                        user_id = cl.user_id_from_username(username)
+                        # Verify session before getting user ID
+                        try:
+                            _ = cl.user_id  # Quick session check
+                        except LoginRequired:
+                            Actor.log.error(f'  ❌ Session expired before processing @{username}')
+                            if instagram_username and instagram_password:
+                                Actor.log.info('  🔄 Attempting to re-login with username/password...')
+                                try:
+                                    cl.login(instagram_username, instagram_password)
+                                    Actor.log.info('  ✅ Re-login successful')
+                                except Exception as relogin_e:
+                                    Actor.log.error(f'  ❌ Re-login failed: {str(relogin_e)}')
+                                    Actor.log.error('   Session expired and cannot recover')
+                                    break
+                            else:
+                                Actor.log.error('   Cannot recover - no username/password provided')
+                                break
+                        
+                        user_id = get_user_id_safe(username)
                         Actor.log.info(f'  Found user ID: {user_id}')
                     except UserNotFound:
                         Actor.log.warning(f'  ❌ User @{username} not found')
@@ -250,28 +306,29 @@ async def main():
                             'timestamp': time.time()
                         })
                         continue
-                    except TypeError as e:
-                        # Handle instagrapi version incompatibility
-                        if 'update_headers' in str(e):
-                            Actor.log.warning(f'  ⚠️  Instagrapi version issue, trying alternative method for @{username}')
-                            try:
-                                # Try alternative method to get user info
-                                user_info = cl.user_info_by_username(username)
-                                user_id = user_info.pk
-                                Actor.log.info(f'  Found user ID via alternative method: {user_id}')
-                            except Exception as alt_e:
-                                Actor.log.error(f'  ❌ Could not get user ID for @{username}: {str(alt_e)}')
-                                failed_count += 1
-                                continue
-                        else:
-                            Actor.log.warning(f'  ❌ Could not find @{username}: {str(e)}')
-                            failed_count += 1
-                            continue
                     except LoginRequired:
-                        Actor.log.error(f'  ❌ Login required - session may have expired')
-                        Actor.log.error('   Please refresh your session ID and try again')
-                        failed_count += 1
-                        continue
+                        Actor.log.error(f'  ❌ Login required - session expired')
+                        if instagram_username and instagram_password:
+                            Actor.log.info('  🔄 Attempting to re-login...')
+                            try:
+                                cl.login(instagram_username, instagram_password)
+                                Actor.log.info('  ✅ Re-login successful, retrying...')
+                                # Retry getting user ID after re-login
+                                try:
+                                    user_id = get_user_id_safe(username)
+                                    Actor.log.info(f'  Found user ID after re-login: {user_id}')
+                                except Exception as retry_e:
+                                    Actor.log.error(f'  ❌ Still failed after re-login: {str(retry_e)}')
+                                    failed_count += 1
+                                    continue
+                            except Exception as relogin_e:
+                                Actor.log.error(f'  ❌ Re-login failed: {str(relogin_e)}')
+                                failed_count += 1
+                                break
+                        else:
+                            Actor.log.error('   Cannot recover - no username/password provided')
+                            failed_count += 1
+                            break
                     except Exception as e:
                         Actor.log.warning(f'  ❌ Could not find @{username}: {str(e)}')
                         failed_count += 1

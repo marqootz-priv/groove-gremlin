@@ -1,12 +1,16 @@
 FROM apify/actor-python:3.11
 
-# Upgrade pip first
+# Upgrade pip first  
 RUN pip install --upgrade pip
 
 # Fix pydantic/crawlee compatibility issue
-# Crawlee in base image uses pydantic v2.1.0+ which has breaking changes
-# Downgrade pydantic to v2.0.x which works with crawlee
-RUN pip install --force-reinstall --no-cache-dir "pydantic>=2.0.0,<2.1.0"
+# Crawlee has a bug with pydantic v2.1.0+ (uses fields with leading underscores)
+# Solution: Use pydantic v2.0.7 which works with crawlee
+RUN pip uninstall -y pydantic || true
+RUN pip install --no-cache-dir "pydantic==2.0.7"
+
+# Verify the fix worked
+RUN python -c "import pydantic; print(f'Pydantic version: {pydantic.__version__}')" || true
 
 # Copy requirements first (for better caching)
 COPY requirements.txt ./

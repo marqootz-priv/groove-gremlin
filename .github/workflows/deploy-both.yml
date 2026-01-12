@@ -136,10 +136,11 @@ jobs:
       - name: Deploy to Heroku
         id: deploy
         run: |
+          set -e  # Exit on any error
           echo "🚀 Deploying to Heroku..."
           echo ""
           echo "🔐 Logging into Heroku..."
-          echo "$HEROKU_API_KEY" | heroku auth:token
+          echo "$HEROKU_API_KEY" | heroku auth:token || { echo "❌ Heroku auth failed"; exit 1; }
           
           echo "📦 Preparing webapp for deployment..."
           # Create a temporary directory and copy webapp files
@@ -147,43 +148,53 @@ jobs:
           echo "  Temp directory: $TEMP_DIR"
           
           # Copy webapp files (including hidden files)
-          cp -r webapp/. "$TEMP_DIR/"
+          echo "  Copying webapp files..."
+          cp -r webapp/. "$TEMP_DIR/" || { echo "❌ Failed to copy files"; exit 1; }
           
           # Change to temp directory
-          cd "$TEMP_DIR"
+          echo "  Changing to temp directory..."
+          cd "$TEMP_DIR" || { echo "❌ Failed to cd to temp directory"; exit 1; }
           echo "  Current directory: $(pwd)"
           echo "  Files in temp dir:"
-          ls -la | head -10
+          ls -la | head -10 || echo "  (ls command completed)"
           
-          # Set git config for this repository
-          git config user.name "GitHub Actions"
-          git config user.email "[email protected]"
-          
-          # Initialize git in temp directory with main branch
+          # Initialize git in temp directory with main branch FIRST
           echo "  Initializing git repository..."
-          git init -b main
+          git init -b main || { echo "❌ Failed to initialize git repository"; exit 1; }
           
           # Verify we're in a git repo
           if [ ! -d ".git" ]; then
             echo "❌ ERROR: .git directory not found after git init"
             exit 1
           fi
+          echo "  ✅ Git repository initialized"
+          
+          # Set git config for this repository (after git init)
+          git config user.name "GitHub Actions" || { echo "❌ Failed to set git user.name"; exit 1; }
+          git config user.email "[email protected]" || { echo "❌ Failed to set git user.email"; exit 1; }
+          echo "  ✅ Git config set"
+          
+          # Verify git is working
+          echo "  Verifying git status..."
+          git status || { echo "❌ Git status failed"; exit 1; }
           
           echo "  Adding files to git..."
-          git add .
+          git add . || { echo "❌ Failed to add files"; exit 1; }
           
           echo "  Committing files..."
           git commit -m "Deploy from GitHub Actions - ${{ github.sha }}"
           
           echo "🔗 Adding Heroku remote..."
-          # Manually add Heroku remote instead of using heroku git:remote
-          # This avoids the "not in a git directory" error
-          git remote add heroku https://git.heroku.com/groove-gremlin.git || git remote set-url heroku https://git.heroku.com/groove-gremlin.git
+          # Manually add Heroku remote with authentication in URL
+          # Format: https://[email]:[token]@git.heroku.com/[app-name].git
+          HEROKU_GIT_URL="https://:$HEROKU_API_KEY@git.heroku.com/groove-gremlin.git"
+          git remote add heroku "$HEROKU_GIT_URL" 2>/dev/null || git remote set-url heroku "$HEROKU_GIT_URL"
           
           echo "  Verifying git remotes:"
           git remote -v
           
           echo "📤 Pushing to Heroku (force push to ensure deployment)..."
+          # Push using the authenticated URL
           git push heroku main --force
           
           echo ""

@@ -188,6 +188,7 @@ async def main():
                         continue
                     
                     try:
+                        # Try to get user ID - may fail due to instagrapi version issues
                         user_id = cl.user_id_from_username(username)
                         Actor.log.info(f'  Found user ID: {user_id}')
                     except UserNotFound:
@@ -198,6 +199,28 @@ async def main():
                             'status': 'user_not_found',
                             'timestamp': time.time()
                         })
+                        continue
+                    except TypeError as e:
+                        # Handle instagrapi version incompatibility
+                        if 'update_headers' in str(e):
+                            Actor.log.warning(f'  ⚠️  Instagrapi version issue, trying alternative method for @{username}')
+                            try:
+                                # Try alternative method to get user info
+                                user_info = cl.user_info_by_username(username)
+                                user_id = user_info.pk
+                                Actor.log.info(f'  Found user ID via alternative method: {user_id}')
+                            except Exception as alt_e:
+                                Actor.log.error(f'  ❌ Could not get user ID for @{username}: {str(alt_e)}')
+                                failed_count += 1
+                                continue
+                        else:
+                            Actor.log.warning(f'  ❌ Could not find @{username}: {str(e)}')
+                            failed_count += 1
+                            continue
+                    except LoginRequired:
+                        Actor.log.error(f'  ❌ Login required - session may have expired')
+                        Actor.log.error('   Please refresh your session ID and try again')
+                        failed_count += 1
                         continue
                     except Exception as e:
                         Actor.log.warning(f'  ❌ Could not find @{username}: {str(e)}')
@@ -231,6 +254,12 @@ async def main():
                                 failed_count += 1
                         except:
                             failed_count += 1
+                    except LoginRequired:
+                        Actor.log.error(f'  ❌ Login required - session expired while following @{username}')
+                        Actor.log.error('   Please refresh your session ID and try again')
+                        failed_count += 1
+                        # Break out of loop since session is invalid
+                        break
                     except Exception as follow_error:
                         Actor.log.error(f'  ❌ Error following: {str(follow_error)}')
                         failed_count += 1

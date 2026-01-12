@@ -4,6 +4,7 @@ FROM apify/actor-python:3.11
 COPY requirements.txt ./
 
 # Install dependencies
+# Note: apify is already installed in base image, we only install our additional deps
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code

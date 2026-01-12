@@ -1,5 +1,5 @@
-# Apify SDK
-apify>=1.0.0
+# Apify SDK is already installed in the base image (apify/actor-python:3.11)
+# Don't reinstall it to avoid pydantic dependency conflicts
 
 # Instagram API library (uses mobile API, not browser)
 # Using version 2.1.2 - known to exist and work

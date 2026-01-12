@@ -144,27 +144,53 @@ jobs:
           echo "📦 Preparing webapp for deployment..."
           # Create a temporary directory and copy webapp files
           TEMP_DIR=$(mktemp -d)
-          cp -r webapp/* "$TEMP_DIR/"
+          echo "  Temp directory: $TEMP_DIR"
+          
+          # Copy webapp files (including hidden files)
+          cp -r webapp/. "$TEMP_DIR/"
+          
+          # Change to temp directory
           cd "$TEMP_DIR"
+          echo "  Current directory: $(pwd)"
+          echo "  Files in temp dir:"
+          ls -la | head -10
           
           # Set git config for this repository
           git config user.name "GitHub Actions"
           git config user.email "[email protected]"
           
           # Initialize git in temp directory with main branch
+          echo "  Initializing git repository..."
           git init -b main
+          
+          # Verify we're in a git repo
+          if [ ! -d ".git" ]; then
+            echo "❌ ERROR: .git directory not found after git init"
+            exit 1
+          fi
+          
+          echo "  Adding files to git..."
           git add .
+          
+          echo "  Committing files..."
           git commit -m "Deploy from GitHub Actions - ${{ github.sha }}"
           
           echo "🔗 Adding Heroku remote..."
-          heroku git:remote -a groove-gremlin
+          # Manually add Heroku remote instead of using heroku git:remote
+          # This avoids the "not in a git directory" error
+          git remote add heroku https://git.heroku.com/groove-gremlin.git || git remote set-url heroku https://git.heroku.com/groove-gremlin.git
+          
+          echo "  Verifying git remotes:"
+          git remote -v
           
           echo "📤 Pushing to Heroku (force push to ensure deployment)..."
           git push heroku main --force
           
           echo ""
           echo "✅ Deployment complete!"
-          cd -
+          
+          # Cleanup
+          cd "$OLDPWD" 2>/dev/null || cd /tmp
           rm -rf "$TEMP_DIR"
         env:
           HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}

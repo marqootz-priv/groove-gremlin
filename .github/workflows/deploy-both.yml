@@ -138,10 +138,6 @@ jobs:
         run: |
           echo "🚀 Deploying to Heroku..."
           echo ""
-          echo "📝 Setting up git for deployment..."
-          git config user.name "GitHub Actions"
-          git config user.email "[email protected]"
-          
           echo "🔐 Logging into Heroku..."
           echo "$HEROKU_API_KEY" | heroku auth:token
           
@@ -151,16 +147,20 @@ jobs:
           cp -r webapp/* "$TEMP_DIR/"
           cd "$TEMP_DIR"
           
-          # Initialize git in temp directory
-          git init
+          # Set git config for this repository
+          git config user.name "GitHub Actions"
+          git config user.email "[email protected]"
+          
+          # Initialize git in temp directory with main branch
+          git init -b main
           git add .
-          git commit -m "Deploy from GitHub Actions - ${{ github.sha }} - ${{ github.event.head_commit.message }}"
+          git commit -m "Deploy from GitHub Actions - ${{ github.sha }}"
           
           echo "🔗 Adding Heroku remote..."
           heroku git:remote -a groove-gremlin
           
           echo "📤 Pushing to Heroku (force push to ensure deployment)..."
-          git push heroku HEAD:main --force
+          git push heroku main --force
           
           echo ""
           echo "✅ Deployment complete!"

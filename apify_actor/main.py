@@ -267,14 +267,21 @@ async def main():
                         except Exception:
                             pass  # Try next method
                         
-                        # Method 3: Try direct API call via username search
+                        # Method 3: Try using search or direct profile access
                         try:
-                            # Last resort: try to get from profile URL
-                            Actor.log.warning(f'  ⚠️  Standard methods failed, trying direct lookup')
-                            # This is a fallback - may not work
-                            raise UserNotFound(f"Could not find user @{username} with any method")
+                            Actor.log.warning(f'  ⚠️  Standard methods failed, trying search method')
+                            # Try searching for the user
+                            search_results = cl.search_users(username)
+                            for user in search_results:
+                                if user.username.lower() == username.lower():
+                                    return user.pk
+                            raise UserNotFound(f"User @{username} not found in search results")
+                        except (UserNotFound, LoginRequired):
+                            raise
                         except Exception as e:
-                            raise Exception(f"All methods failed to get user ID: {str(e)}")
+                            Actor.log.warning(f'  ⚠️  Search method also failed: {str(e)}')
+                            # Last resort: raise the original error
+                            raise Exception(f"All methods failed to get user ID for @{username}. Error: {str(e)}")
                     
                     try:
                         # Verify session before getting user ID

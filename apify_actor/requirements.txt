@@ -2,9 +2,9 @@
 apify>=1.0.0
 
 # Instagram API library (uses mobile API, not browser)
-# Pinned to version that works with extract_user_gql
-# Version 2.0.27+ has breaking changes with update_headers parameter
-instagrapi==2.0.26
+# Using version 2.1.2 - known to exist and work
+# We handle extract_user_gql bug in code with multiple fallback methods
+instagrapi==2.1.2
 
 # Required dependencies
 requests>=2.31.0

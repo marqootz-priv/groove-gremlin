@@ -135,18 +135,40 @@ jobs:
 
       - name: Deploy to Heroku
         id: deploy
-        uses: akhileshns/heroku-deploy@v3.14.15
-        with:
-          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
-          heroku_app_name: "groove-gremlin"
-          heroku_email: ${{secrets.HEROKU_EMAIL}}
-          appdir: "webapp"
-          branch: "main"
-          usedocker: false
-          healthcheck: "https://groove-gremlin-eff2003fcb33.herokuapp.com/"
-          delay: 10
-          rollbackonhealthcheckfailed: false
-          justlogin: false
+        run: |
+          echo "🚀 Deploying to Heroku..."
+          echo ""
+          echo "📝 Setting up git for deployment..."
+          git config user.name "GitHub Actions"
+          git config user.email "[email protected]"
+          
+          echo "🔐 Logging into Heroku..."
+          echo "$HEROKU_API_KEY" | heroku auth:token
+          
+          echo "📦 Preparing webapp for deployment..."
+          # Create a temporary directory and copy webapp files
+          TEMP_DIR=$(mktemp -d)
+          cp -r webapp/* "$TEMP_DIR/"
+          cd "$TEMP_DIR"
+          
+          # Initialize git in temp directory
+          git init
+          git add .
+          git commit -m "Deploy from GitHub Actions - ${{ github.sha }} - ${{ github.event.head_commit.message }}"
+          
+          echo "🔗 Adding Heroku remote..."
+          heroku git:remote -a groove-gremlin
+          
+          echo "📤 Pushing to Heroku (force push to ensure deployment)..."
+          git push heroku HEAD:main --force
+          
+          echo ""
+          echo "✅ Deployment complete!"
+          cd -
+          rm -rf "$TEMP_DIR"
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          HEROKU_EMAIL: ${{ secrets.HEROKU_EMAIL }}
 
       - name: Debug - Check action output
         if: always()

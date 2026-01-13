@@ -306,8 +306,12 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 Returns URL or None.
                 """
                 if not APIFY_TOKEN or not ApifyClient:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Apify token not available, skipping Apify search")
                     return None
                 try:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Calling Apify Google Search for '{name}'...")
                     client = ApifyClient(APIFY_TOKEN)
                     run = client.actor("apify/google-search-scraper").call(run_input={
                         "queries": [f"{name} instagram"],
@@ -318,18 +322,37 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                         "useBuiltInProxy": True,
                     })
                     items = client.dataset(run["defaultDatasetId"]).list_items().items
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Apify search returned {len(items)} result pages")
+                    
+                    instagram_urls_found = []
                     for item in items:
-                        for result in item.get("organicResults", []):
+                        organic = item.get("organicResults", [])
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"Processing {len(organic)} organic results from Apify...")
+                        for result in organic:
                             url = result.get("url", "")
+                            title = result.get("title", "")
                             if "instagram.com" in url:
                                 clean = url.split("?")[0].split("#")[0].rstrip("/")
-                                # Extract username
-                                m = re.search(r"instagram\\.com/([^/?#]+)/?$", clean)
+                                # Extract username - fix regex (single backslash, not double)
+                                m = re.search(r"instagram\.com/([^/?#]+)/?$", clean)
                                 if m:
-                                    uname = m.group(1)
-                                    if uname.lower() not in invalid_paths:
-                                        return f"https://www.instagram.com/{uname}/"
-                except Exception:
+                                    uname = m.group(1).lower()
+                                    if uname not in invalid_paths:
+                                        instagram_urls_found.append(f"https://www.instagram.com/{uname}/")
+                    
+                    if instagram_urls_found:
+                        # Return the first valid Instagram URL found
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"Apify found {len(instagram_urls_found)} Instagram URLs")
+                        return instagram_urls_found[0]
+                    else:
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"Apify search completed but no Instagram URLs found")
+                except Exception as e:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Apify search error: {str(e)[:100]}")
                     return None
                 return None
             

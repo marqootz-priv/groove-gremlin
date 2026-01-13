@@ -12,3 +12,4 @@ rq>=1.15.0
 redis>=5.0.0
 gunicorn>=21.2.0
 psycopg2-binary>=2.9.9
+apify-client>=1.7.1

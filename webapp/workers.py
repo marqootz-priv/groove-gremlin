@@ -15,7 +15,15 @@ import random
 import requests
 from datetime import datetime, timedelta
 import os
+import re
+from urllib.parse import quote
 
+# Optional Apify search (Google Search Results Scraper)
+APIFY_TOKEN = os.getenv('APIFY_API_TOKEN') or os.getenv('APIFY_TOKEN')
+try:
+    from apify_client import ApifyClient
+except ImportError:
+    ApifyClient = None
 # Use REDIS_URL if available (Heroku), otherwise fall back to localhost
 redis_url = os.getenv('REDIS_URL')
 if redis_url:
@@ -284,10 +292,6 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
             urls_list = []
             found_count = 0
             
-            import re
-            from urllib.parse import quote
-            import random
-            
             # Invalid Instagram paths that are not user profiles
             invalid_paths = ['accounts', 'web', 'about', 'blog', 'help', 'explore', 'direct', 'privacy', 'terms', 'jobs', 'developers', 'p', 'reels', 'explore', 'tags', 'stories']
             instagram_patterns = [
@@ -295,6 +299,39 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 r'instagram\.com/([a-zA-Z0-9._]{1,30})/?',
                 r'www\.instagram\.com/([a-zA-Z0-9._]{1,30})/?',
             ]
+
+            def search_instagram_via_apify_google(name):
+                """
+                Use Apify Google Search Results Scraper to find an Instagram profile URL.
+                Returns URL or None.
+                """
+                if not APIFY_TOKEN or not ApifyClient:
+                    return None
+                try:
+                    client = ApifyClient(APIFY_TOKEN)
+                    run = client.actor("apify/google-search-scraper").call(run_input={
+                        "queries": [f"{name} instagram"],
+                        "maxPagesPerQuery": 1,
+                        "resultsPerPage": 10,
+                        "country": "us",
+                        "language": "en",
+                        "useBuiltInProxy": True,
+                    })
+                    items = client.dataset(run["defaultDatasetId"]).list_items().items
+                    for item in items:
+                        for result in item.get("organicResults", []):
+                            url = result.get("url", "")
+                            if "instagram.com" in url:
+                                clean = url.split("?")[0].split("#")[0].rstrip("/")
+                                # Extract username
+                                m = re.search(r"instagram\\.com/([^/?#]+)/?$", clean)
+                                if m:
+                                    uname = m.group(1)
+                                    if uname.lower() not in invalid_paths:
+                                        return f"https://www.instagram.com/{uname}/"
+                except Exception:
+                    return None
+                return None
             
             def construct_instagram_urls(artist_name):
                 """
@@ -463,6 +500,17 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 Returns Instagram profile URL or None.
                 """
                 strategy_used = None
+
+                # Strategy 0: Apify Google Search (if token available)
+                if APIFY_TOKEN and ApifyClient:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Strategy 0: Apify Google search for '{artist_name}'...")
+                    apify_url = search_instagram_via_apify_google(artist_name)
+                    if apify_url:
+                        strategy_used = "Apify Google Search"
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"✓ Found via {strategy_used}: {apify_url}")
+                        return apify_url
                 
                 # Strategy 1: Construct likely URLs and verify them
                 update_job_progress(job, job.progress_percent, job.progress_message,

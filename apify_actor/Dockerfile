@@ -4,10 +4,9 @@ FROM apify/actor-python:3.11
 RUN pip install --upgrade pip
 
 # Fix pydantic/crawlee compatibility issue
-# Crawlee has a bug with pydantic v2.1.0+ (uses fields with leading underscores)
-# Solution: Use pydantic v2.0.7 which works with crawlee
+# Crawlee in the base image expects pydantic v1.x. Downgrade from v2.x to v1.10.x.
 RUN pip uninstall -y pydantic || true
-RUN pip install --no-cache-dir "pydantic==2.0.7"
+RUN pip install --no-cache-dir "pydantic==1.10.12"
 
 # Verify the fix worked
 RUN python -c "import pydantic; print(f'Pydantic version: {pydantic.__version__}')" || true

@@ -3,10 +3,12 @@ FROM apify/actor-python:3.11
 # Upgrade pip first
 RUN pip install --upgrade pip
 
-# Fix pydantic/crawlee compatibility issue
-# Use pydantic 2.0.3 (before underscore restrictions in 2.1.0)
-RUN pip uninstall -y pydantic || true
-RUN pip install --no-cache-dir "pydantic==2.0.3"
+# Fix pydantic/crawlee/apify compatibility
+# Force everything to pydantic v1.x and matching crawlee/apify that work with it
+RUN pip uninstall -y apify crawlee pydantic || true && \
+    pip install --no-cache-dir --force-reinstall --no-deps "pydantic==1.10.12" && \
+    pip install --no-cache-dir --force-reinstall --no-deps "crawlee==0.3.4" && \
+    pip install --no-cache-dir --force-reinstall --no-deps "apify==1.7.1"
 
 # Verify the fix worked
 RUN python -c "import pydantic; print(f'Pydantic version: {pydantic.__version__}')" || true

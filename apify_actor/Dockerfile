@@ -3,9 +3,11 @@ FROM apify/actor-python:3.11
 # Upgrade pip first
 RUN pip install --upgrade pip
 
-# Fix pydantic compatibility - only downgrade pydantic, don't touch apify/crawlee
-# The base image has apify/crawlee that work together, we just need compatible pydantic
-# Use pydantic 2.0.3 which is before the underscore restriction (2.1.0+)
+# Fix apify/apify_shared version mismatch
+# The base image has incompatible versions - upgrade both to latest compatible versions
+RUN pip install --upgrade --no-cache-dir apify apify-shared
+
+# Fix pydantic compatibility - downgrade to avoid underscore restriction
 RUN pip uninstall -y pydantic || true
 RUN pip install --no-cache-dir "pydantic>=2.0.0,<2.1.0"
 

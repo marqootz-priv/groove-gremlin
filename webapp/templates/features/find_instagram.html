@@ -59,10 +59,12 @@
                 </thead>
                 <tbody id="jobs-table-body">
                     {% for job in jobs %}
+                    {% set od = job.output_data | from_json %}
+                    {% set apify_final = od.get('apify_final_status') if od.get('apify_run_id') else none %}
                     <tr data-job-id="{{ job.id }}">
                         <td>
-                            <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" data-job-status="{{ job.id }}">
-                                {{ job.status }}
+                            <span class="badge bg-{% if apify_final == 'FAILED' or apify_final == 'ABORTED' or apify_final == 'TIMED-OUT' %}danger{% elif apify_final == 'SUCCEEDED' %}success{% elif job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}warning{% else %}secondary{% endif %}" data-job-status="{{ job.id }}" data-apify-final="{{ apify_final or '' }}">
+                                {% if apify_final == 'FAILED' or apify_final == 'ABORTED' or apify_final == 'TIMED-OUT' %}Apify failed{% elif apify_final == 'SUCCEEDED' %}Complete{% elif od.get('apify_run_id') and not apify_final %}Apify running...{% else %}{{ job.status }}{% endif %}
                             </span>
                         </td>
                         <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else 'N/A' }}</td>
@@ -167,11 +169,23 @@ function updateJobStatuses() {
                     if (row) {
                         var statusBadge = row.querySelector('span[data-job-status="' + job.id + '"]');
                         if (statusBadge) {
-                            statusBadge.textContent = job.status;
-                            statusBadge.className = 'badge bg-' + 
-                                (job.status === 'completed' ? 'success' : 
-                                 job.status === 'failed' ? 'danger' : 
-                                 job.status === 'running' ? 'warning' : 'secondary');
+                            var af = job.apify_final_status || '';
+                            var label, statusClass;
+                            if (af === 'FAILED' || af === 'ABORTED' || af === 'TIMED-OUT') {
+                                label = 'Apify failed';
+                                statusClass = 'danger';
+                            } else if (af === 'SUCCEEDED') {
+                                label = 'Complete';
+                                statusClass = 'success';
+                            } else if (job.status === 'completed' && job.apify_run_id && !af) {
+                                label = 'Apify running...';
+                                statusClass = 'warning';
+                            } else {
+                                label = job.status;
+                                statusClass = (job.status === 'completed' ? 'success' : job.status === 'failed' ? 'danger' : job.status === 'running' ? 'warning' : 'secondary');
+                            }
+                            statusBadge.textContent = label;
+                            statusBadge.className = 'badge bg-' + statusClass;
                         }
                     }
                 }

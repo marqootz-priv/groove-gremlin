@@ -591,7 +591,7 @@ def jobs_status_api():
     
     jobs_data = []
     for job in recent_jobs:
-        jobs_data.append({
+        job_payload = {
             'id': job.id,
             'job_type': job.job_type,
             'status': job.status,
@@ -599,7 +599,17 @@ def jobs_status_api():
             'completed_at': job.completed_at.isoformat() if job.completed_at else None,
             'progress_percent': job.progress_percent or 0,
             'progress_message': job.progress_message or ''
-        })
+        }
+        # Include Apify outcome for find_instagram jobs so UI can show accurate state
+        if job.job_type == 'find_instagram' and job.output_data:
+            try:
+                od = json.loads(job.output_data)
+                if od.get('apify_run_id'):
+                    job_payload['apify_run_id'] = od.get('apify_run_id')
+                    job_payload['apify_final_status'] = od.get('apify_final_status')
+            except Exception:
+                pass
+        jobs_data.append(job_payload)
     
     return jsonify({'jobs': jobs_data})
 
@@ -747,13 +757,21 @@ def apify_status(job_id):
             
             display_status = status_map.get(apify_status, apify_status.lower())
             
+            # Persist Apify outcome to job so job list and other views reflect accurate state
+            terminal_states = ('SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT')
+            if apify_status in terminal_states and output_data.get('apify_final_status') != apify_status:
+                output_data['apify_final_status'] = apify_status
+                output_data['apify_finished_at'] = run_data.get('finishedAt')
+                job.output_data = json.dumps(output_data, indent=2)
+                db.session.commit()
+
             # Get dataset to see results
             dataset_id = run_data.get('defaultDatasetId')
             results = []
             followed_count = 0
             failed_count = 0
             
-            if dataset_id and apify_status == 'SUCCEEDED':
+            if dataset_id and apify_status in ('SUCCEEDED', 'FAILED'):
                 try:
                     dataset_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
                     dataset_response = requests.get(

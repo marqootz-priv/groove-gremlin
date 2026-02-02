@@ -208,17 +208,27 @@ function updateApifyStatus() {
                 return;
             }
             
-            // Update status badge
+            // Update Apify status badge
             if (statusBadge) {
                 statusBadge.textContent = data.display_status;
                 var statusClass = 'secondary';
                 if (data.display_status === 'completed') statusClass = 'success';
                 else if (data.display_status === 'running') statusClass = 'warning';
-                else if (data.display_status === 'failed' || data.display_status === 'cancelled') statusClass = 'danger';
+                else if (data.display_status === 'failed' || data.display_status === 'cancelled' || data.display_status === 'timed_out') statusClass = 'danger';
                 else if (data.display_status === 'queued') statusClass = 'info';
                 statusBadge.className = 'badge bg-' + statusClass;
             }
             
+            // Update main job status badge to reflect Apify outcome for find_instagram jobs
+            var mainBadge = document.getElementById('status-badge');
+            if (mainBadge && (data.display_status === 'failed' || data.display_status === 'cancelled' || data.display_status === 'timed_out')) {
+                mainBadge.textContent = 'Apify failed';
+                mainBadge.className = 'badge bg-danger';
+            } else if (mainBadge && data.display_status === 'completed') {
+                mainBadge.textContent = 'Complete';
+                mainBadge.className = 'badge bg-success';
+            }
+
             // Update duration
             if (durationEl && data.duration_seconds) {
                 var mins = Math.floor(data.duration_seconds / 60);
@@ -240,8 +250,8 @@ function updateApifyStatus() {
                 }
             }
             
-            // Show results if available
-            if (data.results && data.display_status === 'completed') {
+            // Show results if available (completed or failed with partial results)
+            if (data.results && (data.display_status === 'completed' || data.display_status === 'failed') && (data.results.total_items || 0) > 0) {
                 if (resultsSection) {
                     resultsSection.style.display = 'block';
                     var followedEl = document.getElementById('apify-followed');

@@ -320,7 +320,13 @@ if (btnGen) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ instagram_username: username, instagram_password: password, save: true })
         })
-        .then(function(r) { return r.json().then(function(d) { return [r.status, d]; }); })
+        .then(function(r) {
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function(d) { return [r.status, d]; });
+            }
+            return r.text().then(function(t) { return [r.status, { error: r.ok ? 'Invalid response' : ('Server error: ' + r.status) }]; });
+        })
         .then(function(arr) {
             var status = arr[0], data = arr[1];
             btnGen.disabled = false;

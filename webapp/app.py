@@ -338,9 +338,11 @@ def instagram_generate_session():
     try:
         url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items"
         payload = {
-            "get_session_id": True,
-            "instagram_username": username,
-            "instagram_password": password
+            "input": {
+                "get_session_id": True,
+                "instagram_username": username,
+                "instagram_password": password
+            }
         }
         resp = requests.post(
             url,

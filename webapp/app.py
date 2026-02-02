@@ -320,6 +320,73 @@ def instagram_save():
     return redirect(url_for('dashboard'))
 
 
+@app.route('/api/instagram/generate-session', methods=['POST'])
+@login_required
+def instagram_generate_session():
+    """Generate a fresh Instagram session ID via Apify (username/password login)"""
+    data = request.json or {}
+    username = (data.get('instagram_username') or data.get('username') or '').strip()
+    password = (data.get('instagram_password') or data.get('password') or '').strip()
+    if not username or not password:
+        return jsonify({'error': 'Username and password required'}), 400
+
+    apify_token = os.getenv('APIFY_API_TOKEN')
+    actor_id = os.getenv('APIFY_ACTOR_ID', 'fulfilling_relish~spotify-artists-instagram-follow')
+    if not apify_token:
+        return jsonify({'error': 'Apify API not configured'}), 500
+
+    try:
+        url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync"
+        payload = {
+            "input": {
+                "get_session_id": True,
+                "instagram_username": username,
+                "instagram_password": password
+            }
+        }
+        resp = requests.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {apify_token}", "Content-Type": "application/json"},
+            timeout=130
+        )
+        if resp.status_code != 200:
+            err = resp.json().get('error', {}) if resp.headers.get('content-type', '').startswith('application/json') else {}
+            msg = err.get('message', resp.text[:200])
+            return jsonify({'error': f'Apify error: {msg}'}), 400
+
+        run_data = resp.json().get('data', {})
+        if run_data.get('status') == 'FAILED':
+            status_data = run_data.get('statusMessage') or run_data.get('build') or 'Login failed'
+            return jsonify({'error': f'Instagram login failed: {status_data}'}), 400
+        dataset_id = run_data.get('defaultDatasetId')
+        if not dataset_id:
+            return jsonify({'error': 'No dataset in run response'}), 500
+
+        ds_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+        ds_resp = requests.get(ds_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
+        if ds_resp.status_code != 200:
+            return jsonify({'error': 'Could not fetch session from Apify'}), 500
+        items = ds_resp.json()
+        if not items or not isinstance(items, list):
+            return jsonify({'error': 'No session data returned'}), 500
+        first = items[0] if isinstance(items[0], dict) else {}
+        session_id = first.get('session_id')
+        if not session_id:
+            return jsonify({'error': first.get('error', 'Login failed - check credentials or 2FA')}), 400
+
+        if data.get('save'):
+            current_user.instagram_session_id = session_id
+            if username:
+                current_user.instagram_username = username
+            db.session.commit()
+        return jsonify({'session_id': session_id, 'saved': bool(data.get('save'))})
+    except requests.Timeout:
+        return jsonify({'error': 'Request timed out - try again'}), 504
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/jobs/follow-artists', methods=['POST'])
 @login_required
 def job_follow_artists():

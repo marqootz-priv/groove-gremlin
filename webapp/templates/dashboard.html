@@ -160,15 +160,28 @@
                                placeholder="{% if current_user.instagram_session_id %}Session ID saved - enter new to update{% else %}Paste your sessionid cookie here{% endif %}" 
                                style="width: 100%; font-family: monospace; font-size: 0.8rem;">
                         <details style="margin-top: 8px;">
-                            <summary style="cursor: pointer; font-size: 0.75rem; color: var(--text-secondary);">How to get your Session ID</summary>
+                            <summary style="cursor: pointer; font-size: 0.75rem; color: var(--text-secondary);">Manual: Copy from browser</summary>
                             <ol style="font-size: 0.75rem; color: var(--text-secondary); margin: 8px 0 0 0; padding-left: 20px; line-height: 1.6;">
-                                <li>Open <a href="https://www.instagram.com" target="_blank" style="color: var(--accent-green);">Instagram.com</a> and make sure you're logged in</li>
-                                <li>Press F12 (or Cmd+Option+I on Mac) to open Developer Tools</li>
-                                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <strong>instagram.com</strong></li>
-                                <li>Find the cookie named <code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 2px;">sessionid</code></li>
-                                <li>Double-click the value and copy it (long string of numbers and letters)</li>
+                                <li>Open Instagram.com and make sure you're logged in</li>
+                                <li>Press F12 → <strong>Application</strong> → <strong>Cookies</strong> → instagram.com</li>
+                                <li>Copy the <code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 2px;">sessionid</code> value</li>
                             </ol>
                         </details>
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <strong style="font-size: 0.85rem;">Or generate a fresh Session ID:</strong>
+                            <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 4px 0 8px 0;">Uses your username/password once to create a mobile-compatible session. Password is not stored.</p>
+                            <div style="margin-bottom: 8px;">
+                                <input type="text" id="gen-username" class="form-control" placeholder="Instagram username" 
+                                       value="{{ current_user.instagram_username or '' }}" style="width: 100%; font-size: 0.9rem;">
+                            </div>
+                            <div style="margin-bottom: 8px;">
+                                <input type="password" id="gen-password" class="form-control" placeholder="Instagram password" style="width: 100%; font-size: 0.9rem;">
+                            </div>
+                            <button type="button" id="btn-generate-session" class="btn btn-sm" style="background: var(--accent-green); color: #0a0a0a; width: 100%;">
+                                Generate &amp; Save Session ID
+                            </button>
+                            <div id="gen-session-result" style="margin-top: 8px; font-size: 0.85rem; display: none;"></div>
+                        </div>
                     </div>
                     
                     <!-- Username/Password (Fallback) -->
@@ -286,6 +299,52 @@ if (modal) {
         const newUrl = window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
     }
+}
+
+// Generate Session ID via Apify
+var btnGen = document.getElementById('btn-generate-session');
+if (btnGen) {
+    btnGen.addEventListener('click', function() {
+        var username = (document.getElementById('gen-username') || {}).value.trim();
+        var password = (document.getElementById('gen-password') || {}).value;
+        var resultEl = document.getElementById('gen-session-result');
+        if (!username || !password) {
+            if (resultEl) { resultEl.style.display = 'block'; resultEl.style.color = '#e22134'; resultEl.textContent = 'Enter username and password'; }
+            return;
+        }
+        btnGen.disabled = true;
+        btnGen.textContent = 'Generating...';
+        if (resultEl) { resultEl.style.display = 'none'; }
+        fetch('/api/instagram/generate-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instagram_username: username, instagram_password: password, save: true })
+        })
+        .then(function(r) { return r.json().then(function(d) { return [r.status, d]; }); })
+        .then(function(arr) {
+            var status = arr[0], data = arr[1];
+            btnGen.disabled = false;
+            btnGen.textContent = 'Generate &amp; Save Session ID';
+            if (resultEl) resultEl.style.display = 'block';
+            if (status >= 200 && status < 300 && data.session_id) {
+                resultEl.style.color = '#22c55e';
+                resultEl.textContent = '✓ Session ID generated and saved! Try running Find Instagram now.';
+                if (document.querySelector('input[name="instagram_session_id"]')) {
+                    document.querySelector('input[name="instagram_session_id"]').placeholder = 'Session ID saved';
+                }
+                document.getElementById('gen-password').value = '';
+                setTimeout(function() { location.reload(); }, 1500);
+            } else {
+                resultEl.style.color = '#e22134';
+                resultEl.textContent = data.error || 'Generation failed';
+            }
+        })
+        .catch(function(err) {
+            btnGen.disabled = false;
+            btnGen.textContent = 'Generate &amp; Save Session ID';
+            if (resultEl) { resultEl.style.display = 'block'; resultEl.style.color = '#e22134'; resultEl.textContent = 'Error: ' + (err.message || 'Network error'); }
+        });
+    });
 }
 </script>
 {% endblock %}

@@ -31,6 +31,7 @@ async def main():
             Actor.log.info('Input was wrapped in "input" key, unwrapping...')
             actor_input = actor_input['input']
         
+        get_session_id_only = actor_input.get('get_session_id', False)
         urls = actor_input.get('urls', [])
         
         if isinstance(urls, str):
@@ -45,6 +46,37 @@ async def main():
         max_follows = actor_input.get('max_follows', 20)
         skip_following_check = actor_input.get('skip_following_check', True)
         
+        # Mode: generate session ID only (no follow)
+        if get_session_id_only:
+            if not instagram_username or not instagram_password:
+                raise RuntimeError('Username and password required to generate session ID')
+            Actor.log.info('Mode: Generate Session ID only')
+            cl = Client()
+            cl.set_settings({
+                "uuids": {"phone_id": "57d64c41-a916-3fa5-bd7a-3796c1dab122", "uuid": "8aa373c6-f316-44d7-b49e-d74563f4a8f3",
+                          "client_session_id": "6c296d0a-3534-4dce-b5aa-a6a6ab017443", "advertising_id": "8dc88b76-dfbc-44dc-abbc-31a6f1d54b04",
+                          "device_id": "android-e021b636049dc0e9"},
+                "device_settings": {"app_version": "269.0.0.18.75", "android_version": 26, "android_release": "8.0.0",
+                                   "dpi": "480dpi", "resolution": "1080x1920", "manufacturer": "OnePlus", "device": "ONEPLUS A6013",
+                                   "model": "ONEPLUS A6013", "cpu": "qcom", "version_code": "314665256"},
+                "user_agent": "Instagram 269.0.0.18.75 Android (26/8.0.0; 480dpi; 1080x1920; OnePlus; ONEPLUS A6013; OnePlus6T; qcom; en_US; 314665256)"
+            })
+            try:
+                cl.login(instagram_username, instagram_password)
+            except TwoFactorRequired:
+                raise RuntimeError('Two-factor auth required - use Instagram app to temporarily disable 2FA, or run instagrapi locally')
+            except BadPassword:
+                raise RuntimeError('Invalid username or password')
+            except ChallengeRequired:
+                raise RuntimeError('Instagram challenge - try again later or use a different network')
+            except Exception as e:
+                raise RuntimeError(f'Login failed: {str(e)}')
+            session_id = cl.sessionid
+            Actor.log.info(f'Generated session ID (length {len(session_id)})')
+            await Actor.push_data({'session_id': session_id, 'username': instagram_username})
+            await Actor.set_value('output', {'session_id': session_id, 'username': instagram_username})
+            return
+
         if not urls:
             Actor.log.error('No Instagram URLs provided in input')
             raise RuntimeError('No Instagram URLs provided in input')

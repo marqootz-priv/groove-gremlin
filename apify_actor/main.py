@@ -47,14 +47,12 @@ async def main():
         
         if not urls:
             Actor.log.error('No Instagram URLs provided in input')
-            await Actor.exit()
-            return
-        
+            raise RuntimeError('No Instagram URLs provided in input')
+
         # Need either session ID or username/password
         if not instagram_session_id and (not instagram_username or not instagram_password):
             Actor.log.error('Either instagram_session_id OR (instagram_username AND instagram_password) required')
-            await Actor.exit()
-            return
+            raise RuntimeError('Instagram credentials required')
         
         # Extract usernames from URLs
         usernames_to_follow = []
@@ -144,18 +142,14 @@ async def main():
                             Actor.log.info('   Save this session ID for future runs to avoid login issues')
                         else:
                             Actor.log.error('❌ Username/password login also failed')
-                            await Actor.exit()
-                            return
+                            raise RuntimeError('Instagram login failed - credentials invalid or expired')
                     except Exception as e:
                         Actor.log.error(f'❌ Username/password login failed: {str(e)}')
-                        await Actor.exit()
-                        return
+                        raise RuntimeError(f'Instagram login failed: {str(e)}')
                 elif not logged_in:
                     Actor.log.error('❌ Session ID login failed and no username/password provided')
                     Actor.log.error('   Note: Browser session IDs are not compatible with instagrapi')
-                    Actor.log.error('   Solution: Use username/password login, or generate session ID via instagrapi')
-                    await Actor.exit()
-                    return
+                    raise RuntimeError('Instagram login failed - use username/password or valid session ID')
             else:
                 # Fall back to username/password
                 Actor.log.info('Logging into Instagram via username/password...')
@@ -168,29 +162,20 @@ async def main():
                         Actor.log.info('✅ Successfully logged in')
                     else:
                         Actor.log.error('❌ Login returned False')
-                        await Actor.exit()
-                        return
-                        
+                        raise RuntimeError('Instagram login failed')
+
                 except BadPassword:
                     Actor.log.error('❌ Bad password or login blocked from this IP')
-                    Actor.log.error('   Try using Session ID login instead.')
-                    await Actor.exit()
-                    return
+                    raise RuntimeError('Bad password or login blocked')
                 except TwoFactorRequired:
                     Actor.log.error('❌ Two-factor authentication required')
-                    Actor.log.error('   Use Session ID login instead.')
-                    await Actor.exit()
-                    return
+                    raise RuntimeError('Two-factor auth required - use Session ID login instead')
                 except ChallengeRequired:
                     Actor.log.error('❌ Challenge required - Instagram is blocking this login')
-                    Actor.log.error('   Use Session ID login instead.')
-                    await Actor.exit()
-                    return
+                    raise RuntimeError('Challenge required - use Session ID login instead')
                 except Exception as e:
                     Actor.log.error(f'❌ Login failed: {str(e)}')
-                    Actor.log.error('   Try using Session ID login instead.')
-                    await Actor.exit()
-                    return
+                    raise RuntimeError(f'Instagram login failed: {str(e)}')
             
             time.sleep(3)
             
@@ -201,9 +186,7 @@ async def main():
             except LoginRequired:
                 Actor.log.error('❌ Session expired immediately after login')
                 Actor.log.error('   This usually means the session ID from browser is incompatible')
-                Actor.log.error('   Use username/password login instead, or generate session ID via instagrapi')
-                await Actor.exit()
-                return
+                raise RuntimeError('Session expired - refresh credentials or use username/password')
             
             # Get current following list (optional - often returns 400 for browser sessions)
             following_usernames = set()
@@ -283,11 +266,10 @@ async def main():
                                     Actor.log.info('  ✅ Re-login successful')
                                 except Exception as relogin_e:
                                     Actor.log.error(f'  ❌ Re-login failed: {str(relogin_e)}')
-                                    Actor.log.error('   Session expired and cannot recover')
-                                    break
+                                    raise RuntimeError('Session expired - re-login failed')
                             else:
                                 Actor.log.error('   Cannot recover - no username/password provided')
-                                break
+                                raise RuntimeError('Session expired - no credentials to re-login')
                         
                         user_id = get_user_id_safe(username)
                         Actor.log.info(f'  Found user ID: {user_id}')
@@ -317,12 +299,10 @@ async def main():
                                     continue
                             except Exception as relogin_e:
                                 Actor.log.error(f'  ❌ Re-login failed: {str(relogin_e)}')
-                                failed_count += 1
-                                break
+                                raise RuntimeError('Session expired - re-login failed')
                         else:
                             Actor.log.error('   Cannot recover - no username/password provided')
-                            failed_count += 1
-                            break
+                            raise RuntimeError('Session expired - no credentials to re-login')
                     except Exception as e:
                         Actor.log.warning(f'  ❌ Could not find @{username}: {str(e)}')
                         failed_count += 1
@@ -337,8 +317,7 @@ async def main():
                     except LoginRequired:
                         Actor.log.error('❌ Session expired before following @{username}')
                         Actor.log.error('   The session ID from browser is not compatible with mobile API')
-                        Actor.log.error('   Please use username/password login instead')
-                        break
+                        raise RuntimeError('Session expired - refresh credentials')
                     
                     try:
                         result = cl.user_follow(user_id)
@@ -368,9 +347,7 @@ async def main():
                     except LoginRequired:
                         Actor.log.error(f'  ❌ Login required - session expired while following @{username}')
                         Actor.log.error('   Please refresh your session ID and try again')
-                        failed_count += 1
-                        # Break out of loop since session is invalid
-                        break
+                        raise RuntimeError('Session expired during follow - refresh credentials')
                     except Exception as follow_error:
                         Actor.log.error(f'  ❌ Error following: {str(follow_error)}')
                         failed_count += 1

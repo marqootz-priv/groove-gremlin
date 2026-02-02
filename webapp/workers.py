@@ -314,12 +314,11 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                                       f"Calling Apify Google Search for '{name}'...")
                     client = ApifyClient(APIFY_TOKEN)
                     run = client.actor("apify/google-search-scraper").call(run_input={
-                        "queries": [f"{name} instagram"],
+                        "queries": f"{name} instagram",  # Single string, not array
                         "maxPagesPerQuery": 1,
                         "resultsPerPage": 10,
-                        "country": "us",
-                        "language": "en",
-                        "useBuiltInProxy": True,
+                        "countryCode": "us",
+                        "languageCode": "en",
                     })
                     items = client.dataset(run["defaultDatasetId"]).list_items().items
                     update_job_progress(job, job.progress_percent, job.progress_message,
@@ -464,6 +463,126 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 
                 return None
             
+            def search_instagram_via_musicbrainz(artist_name):
+                """
+                Search MusicBrainz for artist and extract Instagram URL from relations.
+                MusicBrainz stores social media links in artist 'url-relations'.
+                Returns Instagram URL or None.
+                """
+                try:
+                    # Step 1: Search for artist by name
+                    search_url = "https://musicbrainz.org/ws/2/artist"
+                    params = {
+                        "query": f'artist:"{artist_name}"',
+                        "fmt": "json",
+                        "limit": 1
+                    }
+                    headers = {
+                        "User-Agent": "GrooveGremlin/1.0 (spotify-tools)"
+                    }
+
+                    response = requests.get(search_url, params=params, headers=headers, timeout=10)
+                    if response.status_code != 200:
+                        return None
+
+                    data = response.json()
+                    artists = data.get("artists", [])
+                    if not artists:
+                        return None
+
+                    # Get the best match (highest score)
+                    artist = artists[0]
+                    mbid = artist.get("id")
+                    if not mbid:
+                        return None
+
+                    # MusicBrainz requires 1 second between requests
+                    time.sleep(1)
+
+                    # Step 2: Get artist with URL relationships
+                    artist_url = f"https://musicbrainz.org/ws/2/artist/{mbid}"
+                    params = {
+                        "inc": "url-rels",
+                        "fmt": "json"
+                    }
+
+                    response = requests.get(artist_url, params=params, headers=headers, timeout=10)
+                    if response.status_code != 200:
+                        return None
+
+                    artist_data = response.json()
+                    relations = artist_data.get("relations", [])
+
+                    # Step 3: Look for Instagram in relations
+                    for rel in relations:
+                        rel_type = rel.get("type", "").lower()
+                        url_info = rel.get("url", {})
+                        resource = url_info.get("resource", "")
+
+                        # MusicBrainz uses "social network" type for social media links
+                        if rel_type == "social network" and "instagram.com" in resource:
+                            # Clean up the URL
+                            clean_url = resource.split("?")[0].rstrip("/")
+                            if "/p/" not in clean_url and "/reel/" not in clean_url:
+                                return clean_url + "/"
+
+                    return None
+
+                except Exception as e:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"MusicBrainz lookup error: {str(e)[:100]}")
+                    return None
+
+            def search_instagram_via_wikidata(artist_name):
+                """
+                Query Wikidata SPARQL endpoint for Instagram username.
+                Wikidata property P2003 = "Instagram username"
+                Returns Instagram URL or None.
+                """
+                try:
+                    # SPARQL query to find artist and their Instagram username
+                    # P2003 is the Instagram username property
+                    # We search for humans (Q5) or musical groups (Q215380)
+                    sparql_query = f"""
+                    SELECT ?instagram WHERE {{
+                      {{ ?item wdt:P31 wd:Q5 . }}  # human
+                      UNION
+                      {{ ?item wdt:P31 wd:Q215380 . }}  # musical group
+                      UNION
+                      {{ ?item wdt:P31 wd:Q105756498 . }}  # musical duo
+                      ?item rdfs:label "{artist_name}"@en .
+                      ?item wdt:P2003 ?instagram .
+                    }}
+                    LIMIT 1
+                    """
+
+                    endpoint = "https://query.wikidata.org/sparql"
+                    headers = {
+                        "Accept": "application/json",
+                        "User-Agent": "GrooveGremlin/1.0 (spotify-tools)"
+                    }
+                    params = {"query": sparql_query}
+
+                    response = requests.get(endpoint, headers=headers, params=params, timeout=10)
+                    if response.status_code != 200:
+                        return None
+
+                    data = response.json()
+                    bindings = data.get("results", {}).get("bindings", [])
+
+                    if bindings:
+                        instagram_username = bindings[0].get("instagram", {}).get("value", "")
+                        if instagram_username:
+                            # Wikidata stores just the username, construct full URL
+                            return f"https://www.instagram.com/{instagram_username}/"
+
+                    return None
+
+                except Exception as e:
+                    update_job_progress(job, job.progress_percent, job.progress_message,
+                                      f"Wikidata lookup error: {str(e)[:100]}")
+                    return None
+
             def verify_instagram_url(instagram_url):
                 """
                 Check if an Instagram profile URL actually exists using HTTP requests.
@@ -534,10 +653,36 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                         update_job_progress(job, job.progress_percent, job.progress_message,
                                           f"✓ Found via {strategy_used}: {apify_url}")
                         return apify_url
-                
-                # Strategy 1: Construct likely URLs and verify them
+
+                # Strategy 1: MusicBrainz lookup (structured data, reliable for musicians)
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  f"Strategy 1: Constructing likely Instagram URLs for '{artist_name}'...")
+                                  f"Strategy 1: Searching MusicBrainz for '{artist_name}'...")
+                musicbrainz_url = search_instagram_via_musicbrainz(artist_name)
+                if musicbrainz_url:
+                    # Verify the URL actually exists
+                    exists, verified_username = verify_instagram_url(musicbrainz_url)
+                    if exists:
+                        strategy_used = "MusicBrainz"
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"✓ Found via {strategy_used}: {musicbrainz_url}")
+                        return musicbrainz_url
+
+                # Strategy 2: Wikidata SPARQL query (P2003 = Instagram username)
+                update_job_progress(job, job.progress_percent, job.progress_message,
+                                  f"Strategy 2: Querying Wikidata for '{artist_name}'...")
+                wikidata_url = search_instagram_via_wikidata(artist_name)
+                if wikidata_url:
+                    # Verify the URL actually exists
+                    exists, verified_username = verify_instagram_url(wikidata_url)
+                    if exists:
+                        strategy_used = "Wikidata"
+                        update_job_progress(job, job.progress_percent, job.progress_message,
+                                          f"✓ Found via {strategy_used}: {wikidata_url}")
+                        return wikidata_url
+
+                # Strategy 3: Construct likely URLs and verify them
+                update_job_progress(job, job.progress_percent, job.progress_message,
+                                  f"Strategy 3: Constructing likely Instagram URLs for '{artist_name}'...")
                 
                 instagram_urls = construct_instagram_urls(artist_name)
                 update_job_progress(job, job.progress_percent, job.progress_message,
@@ -559,9 +704,9 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     update_job_progress(job, job.progress_percent, job.progress_message,
                                       f"Checked {verified_count} URL variations, none verified as existing profiles")
                 
-                # Strategy 2: Wikipedia lookup (reliable, no API key needed)
+                # Strategy 4: Wikipedia lookup (reliable, no API key needed)
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  f"Strategy 2: Searching Wikipedia for '{artist_name}'...")
+                                  f"Strategy 4: Searching Wikipedia for '{artist_name}'...")
                 
                 try:
                     # Wikipedia API is free and doesn't require authentication
@@ -593,11 +738,11 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     update_job_progress(job, job.progress_percent, job.progress_message,
                                       f"Wikipedia lookup failed: {str(wiki_error)[:100]}")
                 
-                # Strategy 3: Last.fm lookup (optional - requires LASTFM_API_KEY env var)
+                # Strategy 5: Last.fm lookup (optional - requires LASTFM_API_KEY env var)
                 lastfm_api_key = os.getenv('LASTFM_API_KEY')
                 if lastfm_api_key:
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      f"Strategy 3: Searching Last.fm for '{artist_name}'...")
+                                      f"Strategy 5: Searching Last.fm for '{artist_name}'...")
                     
                     try:
                         # Last.fm API requires an API key (get one free at https://www.last.fm/api/account/create)
@@ -642,13 +787,13 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 else:
                     # Skip Last.fm if no API key configured
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      "Strategy 3: Skipping Last.fm (no LASTFM_API_KEY configured)")
+                                      "Strategy 5: Skipping Last.fm (no LASTFM_API_KEY configured)")
                 
-                # Strategy 4: Genius.com lookup (optional - requires GENIUS_CLIENT_TOKEN env var)
+                # Strategy 6: Genius.com lookup (optional - requires GENIUS_CLIENT_TOKEN env var)
                 genius_token = os.getenv('GENIUS_CLIENT_TOKEN')
                 if genius_token:
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      f"Strategy 4: Searching Genius for '{artist_name}'...")
+                                      f"Strategy 6: Searching Genius for '{artist_name}'...")
                     
                     try:
                         # Genius API requires a client token (get one at https://genius.com/api-clients)
@@ -697,11 +842,11 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                 else:
                     # Skip Genius if no token configured
                     update_job_progress(job, job.progress_percent, job.progress_message,
-                                      "Strategy 4: Skipping Genius (no GENIUS_CLIENT_TOKEN configured)")
+                                      "Strategy 6: Skipping Genius (no GENIUS_CLIENT_TOKEN configured)")
                 
-                # Strategy 5: Try Instagram API with normalized usernames
+                # Strategy 7: Try Instagram API with normalized usernames
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  "Strategy 5: Trying Instagram API with username variations...")
+                                  "Strategy 7: Trying Instagram API with username variations...")
                 
                 for url in instagram_urls[:5]:  # Limit to first 5 to avoid too many API calls
                     username = url.split('/')[-2]  # Extract username from URL
@@ -713,9 +858,9 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                         return api_result
                     time.sleep(0.5)  # Be respectful to Instagram API
                 
-                # Strategy 6: DuckDuckGo search (fallback, with improved parsing)
+                # Strategy 8: DuckDuckGo search (fallback, with improved parsing)
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  f"Strategy 6: Searching DuckDuckGo for '{artist_name}' Instagram profile...")
+                                  f"Strategy 8: Searching DuckDuckGo for '{artist_name}' Instagram profile...")
                 
                 query = f'"{artist_name}" instagram profile'
                 try:
@@ -777,9 +922,9 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                     update_job_progress(job, job.progress_percent, job.progress_message,
                                       f"DuckDuckGo search failed: {str(ddg_error)}")
                 
-                # Strategy 7: Google search (last resort) - skip if rate limited
+                # Strategy 9: Google search (last resort) - skip if rate limited
                 update_job_progress(job, job.progress_percent, job.progress_message,
-                                  f"Strategy 7: Searching Google for '{artist_name}' Instagram profile...")
+                                  f"Strategy 9: Searching Google for '{artist_name}' Instagram profile...")
                 
                 try:
                     from googlesearch import search

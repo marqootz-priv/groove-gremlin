@@ -517,6 +517,35 @@ def job_status(job_id):
     return render_template('job_detail.html', job=job, output_data=output_data)
 
 
+@app.route('/jobs/<int:job_id>/manual-follow')
+@login_required
+def manual_follow(job_id):
+    """Mobile-friendly page for manually following Instagram accounts."""
+    job = Job.query.get_or_404(job_id)
+
+    if job.user_id != current_user.id:
+        flash('Unauthorized access')
+        return redirect(url_for('dashboard'))
+
+    if job.job_type != 'find_instagram':
+        flash('This feature is only available for Instagram finder jobs')
+        return redirect(url_for('job_status', job_id=job_id))
+
+    output_data = {}
+    if job.output_data:
+        try:
+            output_data = json.loads(job.output_data)
+        except Exception:
+            pass
+
+    results = output_data.get('results', [])
+
+    # Filter to only include found accounts with valid URLs
+    found_accounts = [r for r in results if r.get('found') and r.get('instagram_url')]
+
+    return render_template('manual_follow.html', job=job, accounts=found_accounts)
+
+
 @app.route('/api/jobs/<int:job_id>/progress')
 @login_required
 def job_progress_api(job_id):

@@ -135,6 +135,11 @@
             <a href="{{ url_for('job_download', job_id=job.id) }}" class="btn btn-primary" style="margin-top: 16px;">
                 Download Results (JSON)
             </a>
+            {% if job.job_type == 'find_instagram' and output_data.get('found_count', 0) > 0 %}
+            <a href="{{ url_for('manual_follow', job_id=job.id) }}" class="btn btn-outline-primary" style="margin-top: 16px; margin-left: 8px; background: linear-gradient(45deg, #405DE6, #833AB4, #C13584, #E1306C); border: none; color: white;">
+                Manual Follow Mode
+            </a>
+            {% endif %}
             {% elif job.status == 'failed' and output_data %}
             <hr style="margin: 24px 0; border: none; border-top: 1px solid rgba(255, 255, 255, 0.05);">
             <h6 style="font-size: 1rem; font-weight: 600; margin-bottom: 12px;">Error:</h6>

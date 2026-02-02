@@ -3,13 +3,12 @@ FROM apify/actor-python:3.11
 # Upgrade pip first
 RUN pip install --upgrade pip
 
-# Fix apify/apify_shared version mismatch
-# The base image has incompatible versions - upgrade both to latest compatible versions
-RUN pip install --upgrade --no-cache-dir apify apify-shared
+# Pin apify SDK to a known working version that doesn't require crawlee
+# Version 1.7.2 is the last version before the crawlee dependency was added
+RUN pip install --no-cache-dir "apify==1.7.2" "apify-shared>=1.1.1,<2.0.0"
 
-# Fix pydantic compatibility - downgrade to avoid underscore restriction
-RUN pip uninstall -y pydantic || true
-RUN pip install --no-cache-dir "pydantic>=2.0.0,<2.1.0"
+# Ensure pydantic is compatible (apify 1.7.2 works with pydantic 2.x)
+RUN pip install --no-cache-dir "pydantic>=2.0.0,<3.0.0"
 
 # Copy requirements first (for better caching)
 COPY requirements.txt ./

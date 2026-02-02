@@ -85,6 +85,126 @@ def get_followed_artists(sp):
     return artists
 
 
+def search_instagram_via_musicbrainz(artist_name):
+    """
+    Search MusicBrainz for artist and extract Instagram URL from relations.
+    MusicBrainz stores social media links in artist 'url-relations'.
+    Returns Instagram handle or None.
+    """
+    try:
+        # Step 1: Search for artist by name
+        search_url = "https://musicbrainz.org/ws/2/artist"
+        params = {
+            "query": f'artist:"{artist_name}"',
+            "fmt": "json",
+            "limit": 1
+        }
+        headers = {
+            "User-Agent": "GrooveGremlin/1.0 (spotify-tools)"
+        }
+
+        response = requests.get(search_url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return None
+
+        data = response.json()
+        artists = data.get("artists", [])
+        if not artists:
+            return None
+
+        # Get the best match (highest score)
+        artist = artists[0]
+        mbid = artist.get("id")
+        if not mbid:
+            return None
+
+        # MusicBrainz requires 1 second between requests
+        time.sleep(1)
+
+        # Step 2: Get artist with URL relationships
+        artist_url = f"https://musicbrainz.org/ws/2/artist/{mbid}"
+        params = {
+            "inc": "url-rels",
+            "fmt": "json"
+        }
+
+        response = requests.get(artist_url, params=params, headers=headers, timeout=10)
+        if response.status_code != 200:
+            return None
+
+        artist_data = response.json()
+        relations = artist_data.get("relations", [])
+
+        # Step 3: Look for Instagram in relations
+        for rel in relations:
+            rel_type = rel.get("type", "").lower()
+            url_info = rel.get("url", {})
+            resource = url_info.get("resource", "")
+
+            # MusicBrainz uses "social network" type for social media links
+            if rel_type == "social network" and "instagram.com" in resource:
+                # Extract handle from URL
+                clean_url = resource.split("?")[0].rstrip("/")
+                if "/p/" not in clean_url and "/reel/" not in clean_url:
+                    # Extract username from URL
+                    parts = clean_url.split("instagram.com/")
+                    if len(parts) > 1:
+                        handle = parts[1].split("/")[0]
+                        if handle:
+                            return handle
+
+        return None
+
+    except Exception:
+        return None
+
+
+def search_instagram_via_wikidata(artist_name):
+    """
+    Query Wikidata SPARQL endpoint for Instagram username.
+    Wikidata property P2003 = "Instagram username"
+    Returns Instagram handle or None.
+    """
+    try:
+        # SPARQL query to find artist and their Instagram username
+        sparql_query = f"""
+        SELECT ?instagram WHERE {{
+          {{ ?item wdt:P31 wd:Q5 . }}
+          UNION
+          {{ ?item wdt:P31 wd:Q215380 . }}
+          UNION
+          {{ ?item wdt:P31 wd:Q105756498 . }}
+          ?item rdfs:label "{artist_name}"@en .
+          ?item wdt:P2003 ?instagram .
+        }}
+        LIMIT 1
+        """
+
+        endpoint = "https://query.wikidata.org/sparql"
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "GrooveGremlin/1.0 (spotify-tools)"
+        }
+        params = {"query": sparql_query}
+
+        response = requests.get(endpoint, headers=headers, params=params, timeout=10)
+        if response.status_code != 200:
+            return None
+
+        data = response.json()
+        bindings = data.get("results", {}).get("bindings", [])
+
+        if bindings:
+            instagram_username = bindings[0].get("instagram", {}).get("value", "")
+            if instagram_username:
+                return instagram_username
+
+        return None
+
+    except Exception:
+        return None
+
+
 def search_instagram_handle(artist_name):
     """
     Search for an Instagram account using web search.
@@ -94,13 +214,23 @@ def search_instagram_handle(artist_name):
     if artist_name in KNOWN_HANDLES:
         return KNOWN_HANDLES[artist_name]
 
-    # Prefer Apify Google Search actor if token available
+    # Strategy 1: MusicBrainz (structured data, reliable for musicians)
+    handle = search_instagram_via_musicbrainz(artist_name)
+    if handle:
+        return handle
+
+    # Strategy 2: Wikidata (P2003 = Instagram username)
+    handle = search_instagram_via_wikidata(artist_name)
+    if handle:
+        return handle
+
+    # Strategy 3: Apify Google Search actor if token available
     if APIFY_TOKEN:
         handle = search_instagram_handle_apify_google(artist_name)
         if handle:
             return handle
 
-    # Try multiple search strategies
+    # Strategy 4: Try multiple web search strategies
     search_queries = [
         f"{artist_name} instagram",
         f'"{artist_name}" instagram official',
@@ -149,12 +279,11 @@ def search_instagram_handle_apify_google(artist_name):
         client = ApifyClient(APIFY_TOKEN)
         run = client.actor("apify/google-search-scraper").call(
             run_input={
-                "queries": [f"{artist_name} instagram"],
+                "queries": f"{artist_name} instagram",  # Single string, not array
                 "maxPagesPerQuery": 1,
                 "resultsPerPage": 10,
-                "country": "us",
-                "language": "en",
-                "useBuiltInProxy": True,
+                "countryCode": "us",
+                "languageCode": "en",
             }
         )
         items = client.dataset(run["defaultDatasetId"]).list_items().items

@@ -1,9 +1,6 @@
-# Apify SDK is already installed in the base image (apify/actor-python:3.11)
-# Don't reinstall it to avoid pydantic dependency conflicts
+# Apify SDK 1.7.2 is installed in Dockerfile (no crawlee - avoids pydantic conflicts)
 
 # Instagram API library (uses mobile API, not browser)
-# Using version 2.1.2 - known to exist and work
-# We handle extract_user_gql bug in code with multiple fallback methods
 instagrapi==2.1.2
 
 # Required dependencies

@@ -7,9 +7,6 @@ RUN pip install --upgrade pip
 # Version 1.7.2 is the last version before the crawlee dependency was added
 RUN pip install --no-cache-dir "apify==1.7.2" "apify-shared>=1.1.1,<2.0.0"
 
-# Ensure pydantic is compatible (apify 1.7.2 works with pydantic 2.x)
-RUN pip install --no-cache-dir "pydantic>=2.0.0,<3.0.0"
-
 # Copy requirements first (for better caching)
 COPY requirements.txt ./
 

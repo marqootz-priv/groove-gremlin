@@ -3,5 +3,8 @@
 # Instagram API library (uses mobile API, not browser)
 instagrapi==2.1.2
 
+# instagrapi dependency
+Pillow>=8.1.1
+
 # Required dependencies
 requests>=2.31.0

@@ -336,7 +336,7 @@ def instagram_generate_session():
         return jsonify({'error': 'Apify API not configured'}), 500
 
     try:
-        url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync"
+        url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items"
         payload = {
             "get_session_id": True,
             "instagram_username": username,
@@ -353,24 +353,18 @@ def instagram_generate_session():
                 j = resp.json()
                 err = j.get('error', {}) if isinstance(j.get('error'), dict) else {}
                 msg = err.get('message', j.get('error', resp.text[:300]))
-            except Exception:
+            except (ValueError, TypeError):
                 msg = resp.text[:300] or f'HTTP {resp.status_code}'
             return jsonify({'error': str(msg)}), 400
 
-        body = resp.json()
-        run_data = body.get('data', body) if isinstance(body, dict) else {}
-        if run_data.get('status') == 'FAILED':
-            status_data = run_data.get('statusMessage') or run_data.get('build') or 'Login failed'
-            return jsonify({'error': f'Instagram login failed: {status_data}'}), 400
-        dataset_id = run_data.get('defaultDatasetId')
-        if not dataset_id:
-            return jsonify({'error': 'No dataset in run response'}), 500
-
-        ds_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
-        ds_resp = requests.get(ds_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
-        if ds_resp.status_code != 200:
-            return jsonify({'error': 'Could not fetch session from Apify'}), 500
-        items = ds_resp.json()
+        try:
+            body = resp.json() if resp.text else {}
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid response from Apify'}), 500
+        data_obj = body.get('data', body) if isinstance(body, dict) else {}
+        items = data_obj.get('items', []) if isinstance(data_obj, dict) else []
+        if isinstance(body, list):
+            items = body
         if not items or not isinstance(items, list):
             return jsonify({'error': 'No session data returned from Apify'}), 500
         first = items[0] if items and isinstance(items[0], dict) else {}
@@ -386,6 +380,8 @@ def instagram_generate_session():
         return jsonify({'session_id': session_id, 'saved': bool(data.get('save'))})
     except requests.Timeout:
         return jsonify({'error': 'Request timed out - try again'}), 504
+    except requests.RequestException as e:
+        return jsonify({'error': f'Apify request failed: {str(e)}'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

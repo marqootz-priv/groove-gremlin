@@ -336,7 +336,7 @@ def instagram_generate_session():
         return jsonify({'error': 'Apify API not configured'}), 500
 
     try:
-        url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items"
+        url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync"
         payload = {
             "get_session_id": True,
             "instagram_username": username,
@@ -361,12 +361,32 @@ def instagram_generate_session():
             body = resp.json() if resp.text else {}
         except (ValueError, TypeError):
             return jsonify({'error': 'Invalid response from Apify'}), 500
-        data_obj = body.get('data', body) if isinstance(body, dict) else {}
-        items = data_obj.get('items', []) if isinstance(data_obj, dict) else []
-        if isinstance(body, list):
-            items = body
+        run_data = body.get('data', body) if isinstance(body, dict) else {}
+        status = run_data.get('status') if isinstance(run_data, dict) else None
+        if status == 'FAILED':
+            msg = run_data.get('statusMessage') or 'Login failed'
+            hist = run_data.get('statusMessageHistory') or []
+            if hist and isinstance(hist, list) and hist[-1]:
+                msg = hist[-1].get('message', msg) if isinstance(hist[-1], dict) else msg
+            return jsonify({'error': f'Instagram login failed: {msg}'}), 400
+        if status in ('ABORTED', 'TIMED-OUT'):
+            return jsonify({'error': f'Actor run {status}'}), 400
+        dataset_id = run_data.get('defaultDatasetId') if isinstance(run_data, dict) else None
+        if not dataset_id:
+            return jsonify({'error': 'No dataset in run response'}), 500
+
+        ds_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+        ds_resp = requests.get(ds_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
+        if ds_resp.status_code != 200:
+            return jsonify({'error': 'Could not fetch session from Apify'}), 500
+        try:
+            items = ds_resp.json() if ds_resp.text else []
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid dataset response from Apify'}), 500
+        if isinstance(items, dict) and 'items' in items:
+            items = items.get('items', [])
         if not items or not isinstance(items, list):
-            return jsonify({'error': 'No session data returned from Apify'}), 500
+            return jsonify({'error': 'Login failed - no session data (check credentials, disable 2FA, or try again)'}), 400
         first = items[0] if items and isinstance(items[0], dict) else {}
         session_id = first.get('session_id')
         if not session_id:

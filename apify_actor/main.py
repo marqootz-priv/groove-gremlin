@@ -43,6 +43,7 @@ async def main():
         delay_min = actor_input.get('delay_min', 30)
         delay_max = actor_input.get('delay_max', 90)
         max_follows = actor_input.get('max_follows', 20)
+        skip_following_check = actor_input.get('skip_following_check', True)
         
         if not urls:
             Actor.log.error('No Instagram URLs provided in input')
@@ -204,19 +205,21 @@ async def main():
                 await Actor.exit()
                 return
             
-            # Get current following list
-            Actor.log.info('Fetching your current following list...')
+            # Get current following list (optional - often returns 400 for browser sessions)
             following_usernames = set()
-            try:
-                following = cl.user_following(my_user_id, amount=500)
-                following_usernames = {user.username.lower() for user in following.values()}
-                Actor.log.info(f'You currently follow {len(following_usernames)} accounts')
-            except LoginRequired:
-                Actor.log.warning('⚠️  Session expired while fetching following list')
-                Actor.log.warning('   This may indicate the session ID is incompatible')
-                Actor.log.warning('   Continuing anyway, but some operations may fail')
-            except Exception as e:
-                Actor.log.warning(f'Could not fetch following list: {str(e)}')
+            if skip_following_check:
+                Actor.log.info('Skipping following list check (skip_following_check=True)')
+            else:
+                Actor.log.info('Fetching your current following list...')
+                try:
+                    following = cl.user_following(my_user_id, amount=500)
+                    following_usernames = {user.username.lower() for user in following.values()}
+                    Actor.log.info(f'You currently follow {len(following_usernames)} accounts')
+                except LoginRequired:
+                    Actor.log.warning('⚠️  Session expired while fetching following list')
+                    Actor.log.warning('   Continuing anyway, but some operations may fail')
+                except Exception as e:
+                    Actor.log.warning(f'Could not fetch following list: {str(e)}')
             
             # Follow accounts
             followed_count = 0
@@ -237,51 +240,37 @@ async def main():
                         })
                         continue
                     
-                    # Helper function to get user ID with multiple fallback methods
+                    def _get_id_via_search(uname):
+                        search_results = cl.search_users(uname)
+                        for user in search_results:
+                            if user.username.lower() == uname.lower():
+                                return user.pk
+                        raise UserNotFound(f"User @{uname} not found in search results")
+
                     def get_user_id_safe(username):
-                        """Try multiple methods to get user ID, handling various errors"""
-                        # Method 1: Try user_id_from_username (fastest)
-                        try:
-                            return cl.user_id_from_username(username)
-                        except (TypeError, AttributeError) as e:
-                            if 'update_headers' in str(e) or 'extract_user_gql' in str(e):
-                                Actor.log.warning(f'  ⚠️  Instagrapi version issue, trying alternative method')
-                            else:
-                                raise
-                        except (UserNotFound, LoginRequired):
-                            raise
-                        except Exception:
-                            pass  # Try next method
-                        
-                        # Method 2: Try user_info_by_username (alternative)
-                        try:
-                            user_info = cl.user_info_by_username(username)
-                            return user_info.pk
-                        except (TypeError, AttributeError) as e:
-                            if 'update_headers' in str(e) or 'extract_user_gql' in str(e):
-                                Actor.log.warning(f'  ⚠️  Alternative method also has version issue')
-                            else:
-                                raise
-                        except (UserNotFound, LoginRequired):
-                            raise
-                        except Exception:
-                            pass  # Try next method
-                        
-                        # Method 3: Try using search or direct profile access
-                        try:
-                            Actor.log.warning(f'  ⚠️  Standard methods failed, trying search method')
-                            # Try searching for the user
-                            search_results = cl.search_users(username)
-                            for user in search_results:
-                                if user.username.lower() == username.lower():
-                                    return user.pk
-                            raise UserNotFound(f"User @{username} not found in search results")
-                        except (UserNotFound, LoginRequired):
-                            raise
-                        except Exception as e:
-                            Actor.log.warning(f'  ⚠️  Search method also failed: {str(e)}')
-                            # Last resort: raise the original error
-                            raise Exception(f"All methods failed to get user ID for @{username}. Error: {str(e)}")
+                        """Try multiple methods to get user ID, with retries for JSONDecodeError (Instagram returning HTML)"""
+                        methods = [
+                            ('user_id_from_username', lambda: cl.user_id_from_username(username)),
+                            ('user_info_by_username', lambda: cl.user_info_by_username(username).pk),
+                            ('search_users', lambda: _get_id_via_search(username)),
+                        ]
+                        last_error = None
+                        for method_name, fn in methods:
+                            for attempt in range(2):
+                                try:
+                                    return fn()
+                                except (UserNotFound, LoginRequired):
+                                    raise
+                                except Exception as e:
+                                    last_error = e
+                                    err_str = str(type(e).__name__) + str(e)
+                                    if 'JSONDecodeError' in err_str:
+                                        Actor.log.warning(f'  ⚠️  {method_name}: Instagram returned HTML (attempt {attempt + 1}/2)')
+                                        if attempt == 0:
+                                            time.sleep(2)
+                                    else:
+                                        break
+                        raise Exception(f"Could not get user ID for @{username}: {last_error}")
                     
                     try:
                         # Verify session before getting user ID

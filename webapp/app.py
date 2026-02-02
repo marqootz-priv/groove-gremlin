@@ -338,11 +338,9 @@ def instagram_generate_session():
     try:
         url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync"
         payload = {
-            "input": {
-                "get_session_id": True,
-                "instagram_username": username,
-                "instagram_password": password
-            }
+            "get_session_id": True,
+            "instagram_username": username,
+            "instagram_password": password
         }
         resp = requests.post(
             url,
@@ -351,9 +349,13 @@ def instagram_generate_session():
             timeout=130
         )
         if resp.status_code != 200:
-            err = resp.json().get('error', {}) if resp.headers.get('content-type', '').startswith('application/json') else {}
-            msg = err.get('message', resp.text[:200])
-            return jsonify({'error': f'Apify error: {msg}'}), 400
+            try:
+                j = resp.json()
+                err = j.get('error', {}) if isinstance(j.get('error'), dict) else {}
+                msg = err.get('message', j.get('error', resp.text[:300]))
+            except Exception:
+                msg = resp.text[:300] or f'HTTP {resp.status_code}'
+            return jsonify({'error': str(msg)}), 400
 
         run_data = resp.json().get('data', {})
         if run_data.get('status') == 'FAILED':
@@ -369,8 +371,8 @@ def instagram_generate_session():
             return jsonify({'error': 'Could not fetch session from Apify'}), 500
         items = ds_resp.json()
         if not items or not isinstance(items, list):
-            return jsonify({'error': 'No session data returned'}), 500
-        first = items[0] if isinstance(items[0], dict) else {}
+            return jsonify({'error': 'No session data returned from Apify'}), 500
+        first = items[0] if items and isinstance(items[0], dict) else {}
         session_id = first.get('session_id')
         if not session_id:
             return jsonify({'error': first.get('error', 'Login failed - check credentials or 2FA')}), 400

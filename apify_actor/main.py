@@ -241,17 +241,16 @@ async def main():
                         continue
                     
                     def _get_id_via_search(uname):
-                        search_results = cl.search_users(uname)
+                        search_results = cl.search_users(uname, count=20)
                         for user in search_results:
                             if user.username.lower() == uname.lower():
                                 return user.pk
                         raise UserNotFound(f"User @{uname} not found in search results")
 
                     def get_user_id_safe(username):
-                        """Try multiple methods to get user ID, with retries for JSONDecodeError (Instagram returning HTML)"""
+                        """Use private mobile API only - avoid public endpoints that return HTML instead of JSON"""
                         methods = [
-                            ('user_id_from_username', lambda: cl.user_id_from_username(username)),
-                            ('user_info_by_username', lambda: cl.user_info_by_username(username).pk),
+                            ('user_info_by_username_v1', lambda: cl.user_info_by_username_v1(username).pk),
                             ('search_users', lambda: _get_id_via_search(username)),
                         ]
                         last_error = None
@@ -263,12 +262,11 @@ async def main():
                                     raise
                                 except Exception as e:
                                     last_error = e
-                                    err_str = str(type(e).__name__) + str(e)
-                                    if 'JSONDecodeError' in err_str:
-                                        Actor.log.warning(f'  ⚠️  {method_name}: Instagram returned HTML (attempt {attempt + 1}/2)')
-                                        if attempt == 0:
-                                            time.sleep(2)
+                                    if attempt == 0:
+                                        Actor.log.warning(f'  ⚠️  {method_name} failed (attempt 1/2): {str(e)[:80]}')
+                                        time.sleep(2)
                                     else:
+                                        Actor.log.warning(f'  ⚠️  {method_name} failed (attempt 2/2)')
                                         break
                         raise Exception(f"Could not get user ID for @{username}: {last_error}")
                     

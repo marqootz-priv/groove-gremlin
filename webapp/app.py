@@ -373,26 +373,42 @@ def instagram_generate_session():
             return jsonify({'error': f'Instagram login failed: {msg}'}), 400
         if status in ('ABORTED', 'TIMED-OUT'):
             return jsonify({'error': f'Actor run {status}'}), 400
-        dataset_id = run_data.get('defaultDatasetId') if isinstance(run_data, dict) else None
-        if not dataset_id:
-            return jsonify({'error': 'No dataset in run response'}), 500
 
-        ds_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
-        ds_resp = requests.get(ds_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
-        if ds_resp.status_code != 200:
-            return jsonify({'error': 'Could not fetch session from Apify'}), 500
-        try:
-            items = ds_resp.json() if ds_resp.text else []
-        except (ValueError, TypeError):
-            return jsonify({'error': 'Invalid dataset response from Apify'}), 500
-        if isinstance(items, dict) and 'items' in items:
-            items = items.get('items', [])
-        if not items or not isinstance(items, list):
-            return jsonify({'error': 'Login failed - no session data (check credentials, disable 2FA, or try again)'}), 400
-        first = items[0] if items and isinstance(items[0], dict) else {}
-        session_id = first.get('session_id')
+        # run-sync returns OUTPUT directly from key-value store (body may be output or {data: run})
+        session_id = None
+        for candidate in (body, run_data):
+            if isinstance(candidate, dict) and candidate.get('session_id'):
+                session_id = candidate.get('session_id')
+                break
         if not session_id:
-            return jsonify({'error': first.get('error', 'Login failed - check credentials or 2FA')}), 400
+            # Fallback: fetch from dataset
+            dataset_id = run_data.get('defaultDatasetId') if isinstance(run_data, dict) else None
+            if dataset_id:
+                ds_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+                ds_resp = requests.get(ds_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
+                if ds_resp.status_code == 200:
+                    try:
+                        items = ds_resp.json() if ds_resp.text else []
+                    except (ValueError, TypeError):
+                        items = []
+                    if isinstance(items, dict) and 'items' in items:
+                        items = items.get('items', [])
+                    if items and isinstance(items, list) and isinstance(items[0], dict):
+                        session_id = items[0].get('session_id')
+            if not session_id:
+                # Fallback: fetch from key-value store OUTPUT
+                kv_id = run_data.get('defaultKeyValueStoreId') if isinstance(run_data, dict) else None
+                if kv_id:
+                    kv_url = f"https://api.apify.com/v2/key-value-stores/{kv_id}/records/OUTPUT"
+                    kv_resp = requests.get(kv_url, headers={"Authorization": f"Bearer {apify_token}"}, timeout=10)
+                    if kv_resp.status_code == 200 and kv_resp.text:
+                        try:
+                            kv_data = kv_resp.json()
+                            session_id = kv_data.get('session_id') if isinstance(kv_data, dict) else None
+                        except (ValueError, TypeError):
+                            pass
+        if not session_id:
+            return jsonify({'error': 'Login failed - no session data (check credentials, disable 2FA, or try again)'}), 400
 
         if data.get('save'):
             current_user.instagram_session_id = session_id

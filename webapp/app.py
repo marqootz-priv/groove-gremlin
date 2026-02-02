@@ -348,7 +348,7 @@ def instagram_generate_session():
             headers={"Authorization": f"Bearer {apify_token}", "Content-Type": "application/json"},
             timeout=130
         )
-        if resp.status_code != 200:
+        if resp.status_code not in (200, 201):
             try:
                 j = resp.json()
                 err = j.get('error', {}) if isinstance(j.get('error'), dict) else {}
@@ -357,7 +357,8 @@ def instagram_generate_session():
                 msg = resp.text[:300] or f'HTTP {resp.status_code}'
             return jsonify({'error': str(msg)}), 400
 
-        run_data = resp.json().get('data', {})
+        body = resp.json()
+        run_data = body.get('data', body) if isinstance(body, dict) else {}
         if run_data.get('status') == 'FAILED':
             status_data = run_data.get('statusMessage') or run_data.get('build') or 'Login failed'
             return jsonify({'error': f'Instagram login failed: {status_data}'}), 400

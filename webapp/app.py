@@ -371,7 +371,8 @@ def instagram_generate_session():
         first = items[0] if items and isinstance(items[0], dict) else {}
         session_id = first.get('session_id')
         if not session_id:
-            return jsonify({'error': first.get('error', 'Instagram login failed (check credentials, disable 2FA, or try again later)'}), 400
+            err_msg = first.get('error') or 'Instagram login failed - check credentials, disable 2FA, or try again later'
+            return jsonify({'error': err_msg}), 400
 
         if data.get('save'):
             current_user.instagram_session_id = session_id

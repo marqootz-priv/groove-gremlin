@@ -71,9 +71,15 @@
           "type": "boolean",
           "description": "Run browser in headless mode (no visible window)",
           "default": false
+        },
+        "get_session_id": {
+          "title": "Generate Session ID Only",
+          "type": "boolean",
+          "description": "If true, only logs in and returns a session ID (no follow). Used by Groove Gremlin Settings.",
+          "default": false
         }
       },
-      "required": ["instagram_username", "instagram_password"]
+      "required": []
     }
   },
   "dockerfile": "./Dockerfile"

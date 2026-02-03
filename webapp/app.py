@@ -336,7 +336,22 @@ def instagram_generate_session():
         return jsonify({'error': 'Apify API not configured'}), 500
 
     try:
+        latest_build = None
+        try:
+            builds_resp = requests.get(
+                f"https://api.apify.com/v2/acts/{actor_id}/builds?limit=1&desc=true",
+                headers={"Authorization": f"Bearer {apify_token}"}, timeout=5
+            )
+            if builds_resp.status_code == 200:
+                bd = builds_resp.json()
+                items = (bd.get('data') or {}).get('items') or []
+                if items:
+                    latest_build = items[0].get('buildNumber')
+        except Exception:
+            pass
         url = f"https://api.apify.com/v2/acts/{actor_id}/run-sync-get-dataset-items"
+        if latest_build:
+            url += f"?build={latest_build}"
         payload = {
             "get_session_id": True,
             "instagram_username": username,

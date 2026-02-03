@@ -670,6 +670,7 @@ def jobs_status_api():
             job.completed_at = datetime.utcnow()
             db.session.commit()
     
+    apify_token = os.getenv('APIFY_API_TOKEN')
     jobs_data = []
     for job in recent_jobs:
         job_payload = {
@@ -681,13 +682,30 @@ def jobs_status_api():
             'progress_percent': job.progress_percent or 0,
             'progress_message': job.progress_message or ''
         }
-        # Include Apify outcome for find_instagram jobs so UI can show accurate state
         if job.job_type == 'find_instagram' and job.output_data:
             try:
                 od = json.loads(job.output_data)
                 if od.get('apify_run_id'):
                     job_payload['apify_run_id'] = od.get('apify_run_id')
                     job_payload['apify_final_status'] = od.get('apify_final_status')
+                    job_payload['apify_run_url'] = od.get('apify_run_url', f"https://console.apify.com/actors/runs/{od.get('apify_run_id')}")
+                    if not od.get('apify_final_status') and apify_token:
+                        try:
+                            r = requests.get(
+                                f"https://api.apify.com/v2/actor-runs/{od['apify_run_id']}",
+                                headers={"Authorization": f"Bearer {apify_token}"}, timeout=5
+                            )
+                            if r.status_code == 200:
+                                run_data = r.json().get('data', {})
+                                st = run_data.get('status')
+                                if st in ('SUCCEEDED', 'FAILED', 'ABORTED', 'TIMED-OUT'):
+                                    od['apify_final_status'] = st
+                                    od['apify_finished_at'] = run_data.get('finishedAt')
+                                    job.output_data = json.dumps(od, indent=2)
+                                    db.session.commit()
+                                    job_payload['apify_final_status'] = st
+                        except Exception:
+                            pass
             except Exception:
                 pass
         jobs_data.append(job_payload)

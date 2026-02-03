@@ -23,9 +23,9 @@ import asyncio
 
 async def main():
     async with Actor:
+        Actor.log.info('Actor started - fetching input...')
         actor_input = await Actor.get_input() or {}
-        
-        Actor.log.info(f'Received input: {json.dumps(actor_input, indent=2)}')
+        Actor.log.info(f'Input keys: {list(actor_input.keys())}')
         
         if 'input' in actor_input and isinstance(actor_input['input'], dict):
             Actor.log.info('Input was wrapped in "input" key, unwrapping...')
@@ -237,6 +237,9 @@ async def main():
                     Actor.log.warning(f'Could not fetch following list: {str(e)}')
             
             # Follow accounts
+            Actor.log.info('=' * 50)
+            Actor.log.info(f'Starting follow loop for {len(usernames_to_follow)} accounts: {", ".join("@" + u for u in usernames_to_follow)}')
+            Actor.log.info('=' * 50)
             followed_count = 0
             failed_count = 0
             already_following_count = 0
@@ -389,9 +392,9 @@ async def main():
                         Actor.log.info(f'  ⏱️  Waiting {delay:.0f} seconds...')
                         time.sleep(delay)
                     
-                    if i % 5 == 0 and i < len(usernames_to_follow):
-                        extra_delay = random.uniform(120, 180)
-                        Actor.log.info(f'  ☕ Taking a {extra_delay:.0f} second break...')
+                    if i > 0 and i % 5 == 0 and i < len(usernames_to_follow) and len(usernames_to_follow) > 5:
+                        extra_delay = random.uniform(30, 60)
+                        Actor.log.info(f'  ☕ Break after 5 follows: {extra_delay:.0f}s...')
                         time.sleep(extra_delay)
                         
                 except Exception as e:

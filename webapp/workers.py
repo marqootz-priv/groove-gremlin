@@ -1062,8 +1062,8 @@ def find_instagram_task(user_id, job_id, limit=None, run_apify=False):
                                 "instagram_session_id": instagram_session_id or "",
                                 "instagram_username": instagram_username or "",
                                 "instagram_password": instagram_password_to_use or "",
-                                "delay_min": 30,
-                                "delay_max": 90,
+                                "delay_min": 5,
+                                "delay_max": 15,
                                 "max_follows": min(40, len(urls_list)),  # Limit to number of URLs found
                                 "skip_following_check": True,  # Avoid 400 from Instagram's following-list endpoint
                                 "headless": False

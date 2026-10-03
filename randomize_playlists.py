@@ -4,6 +4,7 @@ Spotify Playlist Randomizer
 Randomizes the order of tracks in all your playlists.
 """
 
+import argparse
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import random
@@ -28,21 +29,39 @@ SCOPES = [
 ]
 
 
-def create_spotify_client():
-    """Create authenticated Spotify client."""
+def create_spotify_client(headless=False):
+    """Create authenticated Spotify client.
+
+    In headless mode (cron/automation) never fall back to interactive OAuth.
+    Nobody is there to complete a browser login, and spotipy's local callback
+    server would block forever holding the redirect port — which also breaks
+    every later run with "Address already in use".
+    """
     if not CLIENT_ID or not CLIENT_SECRET:
         print("❌ Missing Spotify credentials in .env file")
         raise SystemExit(1)
 
-    return spotipy.Spotify(
-        auth_manager=SpotifyOAuth(
-            client_id=CLIENT_ID,
-            client_secret=CLIENT_SECRET,
-            redirect_uri=REDIRECT_URI,
-            scope=" ".join(SCOPES),
-            cache_path=".spotify_cache",
-        )
+    auth_manager = SpotifyOAuth(
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET,
+        redirect_uri=REDIRECT_URI,
+        scope=" ".join(SCOPES),
+        cache_path=".spotify_cache",
+        open_browser=not headless,
     )
+
+    if headless:
+        # Refreshes via the cached refresh token; None means re-auth is required.
+        token = auth_manager.validate_token(auth_manager.cache_handler.get_cached_token())
+        if not token:
+            print("❌ Spotify credentials expired — interactive re-auth required.")
+            print("   --no-confirm cannot complete a browser login, so stopping here.")
+            print("   Fix it by running once, interactively:")
+            print("     cd %s" % os.path.dirname(os.path.abspath(__file__)))
+            print("     .venv/bin/python randomize_playlists.py")
+            raise SystemExit(1)
+
+    return spotipy.Spotify(auth_manager=auth_manager)
 
 
 def get_all_playlists(sp):
@@ -184,79 +203,94 @@ def randomize_playlist(sp, playlist_id, playlist_name):
         return False, f"Error: {str(e)}"
 
 
-def main():
-    print("=" * 60)
-    print("🔀 Spotify Playlist Randomizer")
-    print("=" * 60)
-    
-    # Create Spotify client
-    sp = create_spotify_client()
-    user = sp.current_user()
-    print(f"\n👋 Hello, {user['display_name']}!")
-    
-    # Get all playlists
-    playlists = get_all_playlists(sp)
-    
-    if not playlists:
-        print("\n⚠️  You don't own any playlists to randomize!")
-        return
-    
-    # Show playlists
-    print("\n📋 Your playlists:")
-    for i, playlist in enumerate(playlists, 1):
-        privacy = "Public" if playlist["public"] else "Private"
-        collab = " (Collaborative)" if playlist["collaborative"] else ""
-        print(f"   {i}. {playlist['name']} - {playlist['tracks_total']} tracks [{privacy}]{collab}")
-    
-    # Ask for confirmation
-    print(f"\n⚠️  This will randomize the order of tracks in ALL {len(playlists)} playlists.")
-    print("   This action cannot be easily undone!")
-    print("\nProceed? (y/n): ", end="")
-    confirm = input().strip().lower()
-    
-    if confirm != "y":
-        print("\n❌ Cancelled.")
-        return
-    
-    # Ask if they want to exclude certain playlists
-    print("\nExclude any playlists? Enter numbers separated by commas (e.g., 1,3,5) or press Enter for all: ", end="")
-    exclude_input = input().strip()
-    
-    excluded_indices = set()
-    if exclude_input:
-        try:
-            excluded_indices = {int(x.strip()) - 1 for x in exclude_input.split(",")}
-            excluded_indices = {i for i in excluded_indices if 0 <= i < len(playlists)}
-        except ValueError:
-            print("   ⚠️  Invalid input, randomizing all playlists")
-    
-    # Randomize playlists
-    print(f"\n🔀 Randomizing playlists...")
-    print("   Note: Each playlist is randomized independently.")
-    print("   Tracks stay in their original playlists.\n")
+def run_randomize(playlists, sp, excluded_indices=None):
+    """Randomize playlists and return (successful, failed, skipped) counts."""
+    excluded_indices = excluded_indices or set()
     successful = 0
     failed = 0
     skipped = 0
-    
+
     for i, playlist in enumerate(playlists):
         if i in excluded_indices:
             print(f"⏭️  Skipping: {playlist['name']}")
             skipped += 1
             continue
-        
+
         print(f"🔄 Randomizing: {playlist['name']}...", end=" ")
         success, message = randomize_playlist(sp, playlist["id"], playlist["name"])
-        
+
         if success:
             print(f"✅ {message}")
             successful += 1
         else:
             print(f"❌ {message}")
             failed += 1
-        
-        # Rate limiting
+
         time.sleep(0.2)
-    
+
+    return successful, failed, skipped
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Randomize Spotify playlists")
+    parser.add_argument("--no-confirm", action="store_true",
+                        help="Skip confirmation prompts (for cron/automation)")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("🔀 Spotify Playlist Randomizer")
+    print("=" * 60)
+
+    # Create Spotify client
+    sp = create_spotify_client(headless=args.no_confirm)
+    user = sp.current_user()
+    print(f"\n👋 Hello, {user['display_name']}!")
+
+    # Get all playlists
+    playlists = get_all_playlists(sp)
+
+    if not playlists:
+        print("\n⚠️  You don't own any playlists to randomize!")
+        return
+
+    # Show playlists
+    print("\n📋 Your playlists:")
+    for i, playlist in enumerate(playlists, 1):
+        privacy = "Public" if playlist["public"] else "Private"
+        collab = " (Collaborative)" if playlist["collaborative"] else ""
+        print(f"   {i}. {playlist['name']} - {playlist['tracks_total']} tracks [{privacy}]{collab}")
+
+    if args.no_confirm:
+        # Non-interactive mode: randomize all playlists
+        print(f"\n🔀 Randomizing all {len(playlists)} playlists (--no-confirm)...\n")
+        successful, failed, skipped = run_randomize(playlists, sp)
+    else:
+        # Interactive mode
+        print(f"\n⚠️  This will randomize the order of tracks in ALL {len(playlists)} playlists.")
+        print("   This action cannot be easily undone!")
+        print("\nProceed? (y/n): ", end="")
+        confirm = input().strip().lower()
+
+        if confirm != "y":
+            print("\n❌ Cancelled.")
+            return
+
+        print("\nExclude any playlists? Enter numbers separated by commas (e.g., 1,3,5) or press Enter for all: ", end="")
+        exclude_input = input().strip()
+
+        excluded_indices = set()
+        if exclude_input:
+            try:
+                excluded_indices = {int(x.strip()) - 1 for x in exclude_input.split(",")}
+                excluded_indices = {i for i in excluded_indices if 0 <= i < len(playlists)}
+            except ValueError:
+                print("   ⚠️  Invalid input, randomizing all playlists")
+
+        print(f"\n🔀 Randomizing playlists...")
+        print("   Note: Each playlist is randomized independently.")
+        print("   Tracks stay in their original playlists.\n")
+        successful, failed, skipped = run_randomize(playlists, sp, excluded_indices)
+
     # Summary
     print("\n" + "=" * 60)
     print("📊 Summary:")
@@ -264,7 +298,7 @@ def main():
     print(f"   ⏭️  Skipped: {skipped}")
     print(f"   ❌ Failed: {failed}")
     print("=" * 60)
-    
+
     if successful > 0:
         print("\n🎉 Done! Your playlists have been randomized.")
         print("   Note: The changes may take a moment to appear in the Spotify app.")

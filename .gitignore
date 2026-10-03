@@ -26,3 +26,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Spotify OAuth token cache - contains a live refresh token
+.spotify_cache

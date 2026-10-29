@@ -6,6 +6,7 @@ Randomizes the order of tracks in all your playlists.
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+import argparse
 import random
 import time
 import os
@@ -18,6 +19,7 @@ load_dotenv()
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback")
+CACHE_PATH = os.getenv("SPOTIFY_CACHE_PATH", ".spotify_cache")
 
 # Required scopes
 SCOPES = [
@@ -28,21 +30,29 @@ SCOPES = [
 ]
 
 
-def create_spotify_client():
-    """Create authenticated Spotify client."""
+def create_spotify_client(headless=False):
+    """Create authenticated Spotify client.
+
+    In headless mode there is no browser to log in with, so a token must
+    already be cached; fail fast rather than wait on a prompt nobody sees.
+    """
     if not CLIENT_ID or not CLIENT_SECRET:
         print("❌ Missing Spotify credentials in .env file")
         raise SystemExit(1)
 
-    return spotipy.Spotify(
-        auth_manager=SpotifyOAuth(
-            client_id=CLIENT_ID,
-            client_secret=CLIENT_SECRET,
-            redirect_uri=REDIRECT_URI,
-            scope=" ".join(SCOPES),
-            cache_path=".spotify_cache",
-        )
+    auth_manager = SpotifyOAuth(
+        client_id=CLIENT_ID,
+        client_secret=CLIENT_SECRET,
+        redirect_uri=REDIRECT_URI,
+        scope=" ".join(SCOPES),
+        cache_path=CACHE_PATH,
+        open_browser=not headless,
     )
+    if headless and not auth_manager.validate_token(auth_manager.cache_handler.get_cached_token()):
+        print(f"❌ No valid cached token at {CACHE_PATH}; run once interactively to log in")
+        raise SystemExit(1)
+
+    return spotipy.Spotify(auth_manager=auth_manager)
 
 
 def get_all_playlists(sp):
@@ -159,12 +169,12 @@ def randomize_playlist(sp, playlist_id, playlist_name):
                 # Replace all tracks at once in the same playlist
                 sp.playlist_replace_items(playlist_id, shuffled)
             else:
-                # For playlists with >100 tracks, replace in chunks
-                # First, clear the playlist
-                sp.playlist_replace_items(playlist_id, [])
+                # For playlists with >100 tracks, replace with the first 100,
+                # then add the rest, so the playlist is never left empty
+                sp.playlist_replace_items(playlist_id, shuffled[:100])
                 
-                # Then add tracks back in batches of 100 (all to the same playlist)
-                for i in range(0, len(shuffled), 100):
+                # Then add the remaining tracks in batches of 100 (all to the same playlist)
+                for i in range(100, len(shuffled), 100):
                     batch = shuffled[i:i + 100]
                     # Validate batch before sending
                     valid_batch = [uri for uri in batch if uri and uri.startswith("spotify:track:")]
@@ -184,13 +194,23 @@ def randomize_playlist(sp, playlist_id, playlist_name):
         return False, f"Error: {str(e)}"
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Randomize the order of tracks in your playlists.")
+    parser.add_argument("--yes", "-y", action="store_true",
+                        help="run unattended: no prompts, never open a browser")
+    parser.add_argument("--exclude", default=os.getenv("RANDOMIZE_EXCLUDE", ""),
+                        help="comma-separated playlist names to skip (or set RANDOMIZE_EXCLUDE)")
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     print("=" * 60)
     print("🔀 Spotify Playlist Randomizer")
     print("=" * 60)
     
     # Create Spotify client
-    sp = create_spotify_client()
+    sp = create_spotify_client(headless=args.yes)
     user = sp.current_user()
     print(f"\n👋 Hello, {user['display_name']}!")
     
@@ -208,25 +228,30 @@ def main():
         collab = " (Collaborative)" if playlist["collaborative"] else ""
         print(f"   {i}. {playlist['name']} - {playlist['tracks_total']} tracks [{privacy}]{collab}")
     
-    # Ask for confirmation
-    print(f"\n⚠️  This will randomize the order of tracks in ALL {len(playlists)} playlists.")
-    print("   This action cannot be easily undone!")
-    print("\nProceed? (y/n): ", end="")
-    confirm = input().strip().lower()
+    excluded_names = {n.strip().lower() for n in args.exclude.split(",") if n.strip()}
+    excluded_indices = {i for i, p in enumerate(playlists) if p["name"].lower() in excluded_names}
     
-    if confirm != "y":
-        print("\n❌ Cancelled.")
-        return
+    if not args.yes:
+        # Ask for confirmation
+        print(f"\n⚠️  This will randomize the order of tracks in ALL {len(playlists)} playlists.")
+        print("   This action cannot be easily undone!")
+        print("\nProceed? (y/n): ", end="")
+        confirm = input().strip().lower()
+        
+        if confirm != "y":
+            print("\n❌ Cancelled.")
+            return
+        
+        # Ask if they want to exclude certain playlists
+        print("\nExclude any playlists? Enter numbers separated by commas (e.g., 1,3,5) or press Enter for all: ", end="")
+        exclude_input = input().strip()
+    else:
+        exclude_input = ""
     
-    # Ask if they want to exclude certain playlists
-    print("\nExclude any playlists? Enter numbers separated by commas (e.g., 1,3,5) or press Enter for all: ", end="")
-    exclude_input = input().strip()
-    
-    excluded_indices = set()
     if exclude_input:
         try:
-            excluded_indices = {int(x.strip()) - 1 for x in exclude_input.split(",")}
-            excluded_indices = {i for i in excluded_indices if 0 <= i < len(playlists)}
+            picked = {int(x.strip()) - 1 for x in exclude_input.split(",")}
+            excluded_indices |= {i for i in picked if 0 <= i < len(playlists)}
         except ValueError:
             print("   ⚠️  Invalid input, randomizing all playlists")
     
@@ -268,6 +293,7 @@ def main():
     if successful > 0:
         print("\n🎉 Done! Your playlists have been randomized.")
         print("   Note: The changes may take a moment to appear in the Spotify app.")
+
 
 
 if __name__ == "__main__":
